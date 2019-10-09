@@ -5,7 +5,12 @@
 #include "list.h" // list_node
 
 struct coord {
-    double x, y, z;
+    union {
+        struct {
+            double x, y, z;
+        };
+        double axis[3];
+    };
 };
 
 struct move_accel {

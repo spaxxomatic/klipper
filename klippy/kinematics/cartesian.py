@@ -16,7 +16,7 @@ class CartKinematics:
             rail.setup_itersolve('cartesian_res_stepper_alloc', axis)
         # XXX
         ffi_main, ffi_lib = chelper.get_ffi()
-        self.cart_set_smooth_velocity = ffi_lib.cart_set_smooth_velocity
+        self.cart_set_smooth_time = ffi_lib.cart_set_smooth_time
         self.trapq_add_move = ffi_lib.trapq_add_move
         stepper_x = self.rails[0].get_steppers()[0].mcu_stepper
         stepper_y = self.rails[1].get_steppers()[0].mcu_stepper
@@ -28,15 +28,10 @@ class CartKinematics:
         ffi_lib.stepcompress_set_itersolve(stepper_x._stepqueue, self.sk_x)
         ffi_lib.stepcompress_set_itersolve(stepper_y._stepqueue, self.sk_y)
         ffi_lib.stepcompress_set_itersolve(stepper_z._stepqueue, self.sk_z)
-        self.smooth_x = self.balance_x = self.smooth_y = self.balance_y = 0.
-        smooth_x = config.getfloat('x_velocity_smooth_time', 0., minval=0.)
-        balance_x = config.getfloat('x_velocity_smooth_balance', 1./3.,
-                                    minval=0., maxval=1.)
-        smooth_y = config.getfloat('y_velocity_smooth_time', 0., minval=0.)
-        balance_y = config.getfloat('y_velocity_smooth_balance', 1./3.,
-                                    minval=0., maxval=1.)
-        self._set_velocity_smooth(toolhead, smooth_x, balance_x,
-                                  smooth_y, balance_y)
+        self.smooth_x = self.smooth_y = 0.
+        smooth_x = config.getfloat('x_smooth_time', 0., minval=0., maxval=.200)
+        smooth_y = config.getfloat('y_smooth_time', 0., minval=0., maxval=.200)
+        self._set_smooth_time(toolhead, smooth_x, smooth_y)
         # Setup boundary checks
         max_velocity, max_accel = toolhead.get_max_velocity()
         self.max_z_velocity = config.getfloat(
@@ -66,11 +61,11 @@ class CartKinematics:
             self.printer.lookup_object('gcode').register_command(
                 'SET_DUAL_CARRIAGE', self.cmd_SET_DUAL_CARRIAGE,
                 desc=self.cmd_SET_DUAL_CARRIAGE_help)
-        # Register set_smooth_velocity command - XXX
+        # Register set_axis_smooth_time command - XXX
         gcode = self.printer.lookup_object('gcode')
-        gcode.register_command("SET_SMOOTH_VELOCITY",
-                               self.cmd_SET_SMOOTH_VELOCITY,
-                               desc=self.cmd_SET_SMOOTH_VELOCITY_help)
+        gcode.register_command("SET_AXIS_SMOOTH_TIME",
+                               self.cmd_SET_AXIS_SMOOTH_TIME,
+                               desc=self.cmd_SET_AXIS_SMOOTH_TIME_help)
     def get_steppers(self, flags=""):
         if flags == "Z":
             return self.rails[2].get_steppers()
@@ -175,32 +170,28 @@ class CartKinematics:
         self._activate_carriage(carriage)
         gcode.reset_last_position()
     # XXX
-    def _set_velocity_smooth(self, toolhead, smooth_x, balance_x,
-                             smooth_y, balance_y):
+    def _set_smooth_time(self, toolhead, smooth_x, smooth_y):
         old_smooth_time = max(self.smooth_x, self.smooth_y) * .5
         new_smooth_time = max(smooth_x, smooth_y) * .5
         toolhead.note_flush_delay(new_smooth_time, old_delay=old_smooth_time)
-        self.cart_set_smooth_velocity(self.sk_x, smooth_x * .5, balance_x)
-        self.cart_set_smooth_velocity(self.sk_y, smooth_y * .5, balance_y)
+        self.cart_set_smooth_time(self.sk_x, smooth_x)
+        self.cart_set_smooth_time(self.sk_y, smooth_y)
         self.smooth_x = smooth_x
-        self.balance_x = balance_x
         self.smooth_y = smooth_y
-        self.balance_y = balance_y
-    cmd_SET_SMOOTH_VELOCITY_help = "Set cartesian velocity smoothing parameters"
-    def cmd_SET_SMOOTH_VELOCITY(self, params):
+    cmd_SET_AXIS_SMOOTH_TIME_help = "Set cartesian time smoothing parameters"
+    def cmd_SET_AXIS_SMOOTH_TIME(self, params):
         gcode = self.printer.lookup_object('gcode')
-        smooth_x = gcode.get_float('SMOOTH_X', params, self.smooth_x, minval=0.)
-        balance_x = gcode.get_float('BALANCE_X', params, self.balance_x,
-                                    minval=0., maxval=1.)
-        smooth_y = gcode.get_float('SMOOTH_Y', params, self.smooth_y, minval=0.)
-        balance_y = gcode.get_float('BALANCE_Y', params, self.balance_y,
-                                    minval=0., maxval=1.)
+        if 'SMOOTH_XY' in params:
+            smooth_x = smooth_y = gcode.get_float('SMOOTH_XY', params,
+                                                  minval=0., maxval=.200)
+        else:
+            smooth_x = gcode.get_float('SMOOTH_X', params, self.smooth_x,
+                                       minval=0., maxval=.200)
+            smooth_y = gcode.get_float('SMOOTH_Y', params, self.smooth_y,
+                                       minval=0., maxval=.200)
         toolhead = self.printer.lookup_object("toolhead")
-        self._set_velocity_smooth(toolhead, smooth_x, balance_x,
-                                  smooth_y, balance_y)
-        gcode.respond_info("smooth_x:%.6f balance_x:%.6f"
-                           " smooth_y:%.6f balance_y:%.6f"
-                           % (smooth_x, balance_x, smooth_y, balance_y))
+        self._set_smooth_time(toolhead, smooth_x, smooth_y)
+        gcode.respond_info("smooth_x:%.6f smooth_y:%.6f" % (smooth_x, smooth_y))
 
 def load_kinematics(toolhead, config):
     return CartKinematics(toolhead, config)

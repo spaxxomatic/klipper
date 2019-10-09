@@ -10,6 +10,7 @@
 #include "compiler.h" // unlikely
 #include "itersolve.h" // itersolve_gen_steps_range
 #include "list.h" // list_empty
+#include "pyhelper.h" // errorf
 #include "trapq.h" // trapq_find_move
 
 void __visible
@@ -69,6 +70,85 @@ trapq_find_move(struct stepper_kinematics *sk, struct move *m, double *ptime)
     }
     *ptime = end_time;
     return m;
+}
+
+static double
+move_integrate_accel(struct move *m, struct move_accel *ma
+                     , int axis, double start, double end)
+{
+    double start_pos = m->start_pos.axis[axis];
+    if (ma == &m->decel) // XXX
+        start_pos += m->decel_start_d * m->axes_r.axis[axis];
+    double half_c1 = .5 * ma->c1, third_c2 = (1. / 3.) * ma->c2;
+    double si = start * start * (half_c1 + third_c2 * start);
+    double ei = end * end * (half_c1 + third_c2 * end);
+    double avg_pos = (ei - si) * m->axes_r.axis[axis];
+    return start_pos * (end - start) + avg_pos;
+}
+
+static double
+move_integrate_cruise(struct move *m, int axis, double start, double end)
+{
+    double avg_d = m->cruise_start_d + m->cruise_v * .5 * (start + end);
+    double avg_pos = m->start_pos.axis[axis] + avg_d * m->axes_r.axis[axis];
+    return avg_pos * (end - start);
+}
+
+// Calculate the definitive integral for a cartesian axis
+double
+trapq_integrate(struct stepper_kinematics *sk, struct move *m, int axis
+                , double start, double end)
+{
+    double res = 0.;
+    if (start < 0.) {
+        // Integrate over previous moves
+        if (list_is_first(&m->node, &sk->moves)) {
+            res += m->start_pos.axis[axis] * -start;
+        } else {
+            struct move *prev = list_prev_entry(m, node);
+            double delta = m->print_time - prev->print_time;
+            double new_start = start + delta;
+            if (new_start >= prev->move_t) {
+                res += m->start_pos.axis[axis] * -start;
+            } else {
+                res += m->start_pos.axis[axis] * (delta - prev->move_t);
+                res += trapq_integrate(sk, prev, axis, new_start, prev->move_t);
+            }
+        }
+        start = 0.;
+    }
+    // Integrate over this move
+    if (start < m->accel_t) {
+        if (end <= m->accel_t)
+            return res + move_integrate_accel(m, &m->accel, axis, start, end);
+        res += move_integrate_accel(m, &m->accel, axis, start, m->accel_t);
+        start = m->accel_t;
+    }
+    double cruise_end_t = m->accel_t + m->cruise_t;
+    if (start < cruise_end_t) {
+        if (end <= cruise_end_t)
+            return res + move_integrate_cruise(m, axis, start - m->accel_t
+                                               , end - m->accel_t);
+        res += move_integrate_cruise(m, axis, start - m->accel_t, m->cruise_t);
+        start = cruise_end_t;
+    }
+    if (end <= m->move_t)
+        return res + move_integrate_accel(
+            m, &m->decel, axis, start - cruise_end_t, end - cruise_end_t);
+    // XXX - only call if there is decel
+    res += move_integrate_accel(
+        m, &m->decel, axis, start - cruise_end_t, m->move_t - cruise_end_t);
+    // Integrate over future moves
+    double end_pos = move_get_coord(m, m->move_t).axis[axis];
+    double extra_t = end - m->move_t;
+    if (list_is_last(&m->node, &sk->moves))
+        return res + end_pos * extra_t;
+    struct move *next = list_next_entry(m, node);
+    double delta = next->print_time - (m->print_time + m->move_t);
+    if (delta >= extra_t)
+        return res + end_pos * extra_t;
+    res += end_pos * delta;
+    return res + trapq_integrate(sk, next, axis, 0., extra_t - delta);
 }
 
 int

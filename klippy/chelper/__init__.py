@@ -70,8 +70,8 @@ defs_kin_cartesian = """
     struct stepper_kinematics *cartesian_stepper_alloc(char axis);
 
     // XXX
-    void cart_set_smooth_velocity(struct stepper_kinematics *sk
-        , double half_smooth_time, double spring_factor);
+    void cart_set_smooth_time(struct stepper_kinematics *sk
+        , double smooth_time);
     struct stepper_kinematics *cartesian_res_stepper_alloc(char axis);
 """
 
