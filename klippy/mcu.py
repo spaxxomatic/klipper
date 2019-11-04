@@ -4,7 +4,8 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import sys, os, zlib, logging, math
-import serialhdl, pins, chelper, clocksync
+import pins, chelper, clocksync
+import spihdl as serialhdl
 
 class error(Exception):
     pass

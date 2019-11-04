@@ -269,6 +269,7 @@ stepcompress_flush(struct stepcompress *sc, uint64_t move_clock)
         return 0;
     while (sc->last_step_clock < move_clock) {
         struct step_move move = compress_bisect_add(sc);
+        //nutiu printf("MOVE INT %i CNT %i ADD %i\n", move.interval, move.count, move.add);
         int ret = check_line(sc, move);
         if (ret)
             return ret;

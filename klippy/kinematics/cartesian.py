@@ -94,7 +94,7 @@ class CartKinematics:
                 rail.motor_enable(print_time, 1)
             need_motor_enable |= not rail.is_motor_enabled()
         self.need_motor_enable = need_motor_enable
-    def _check_endstops(self, move):
+    def _check_endstops(self, move):        
         end_pos = move.end_pos
         for i in (0, 1, 2):
             if (move.axes_d[i]
@@ -107,17 +107,17 @@ class CartKinematics:
     def check_move(self, move):
         limits = self.limits
         xpos, ypos = move.end_pos[:2]
-        if (xpos < limits[0][0] or xpos > limits[0][1]
-            or ypos < limits[1][0] or ypos > limits[1][1]):
-            self._check_endstops(move)
+        #nutiu if (xpos < limits[0][0] or xpos > limits[0][1]
+        #nutiu     or ypos < limits[1][0] or ypos > limits[1][1]):
+        #nutiu     self._check_endstops(move)
         if not move.axes_d[2]:
             # Normal XY move - use defaults
             return
         # Move with Z - update velocity and accel for slower Z axis
-        self._check_endstops(move)
+        #nutiu self._check_endstops(move)
         z_ratio = move.move_d / abs(move.axes_d[2])
-        move.limit_speed(
-            self.max_z_velocity * z_ratio, self.max_z_accel * z_ratio)
+        move.limit_speed(self.max_z_velocity * z_ratio, self.max_z_accel * z_ratio)
+        
     def move(self, print_time, move):
         if self.need_motor_enable:
             self._check_motor_enable(print_time, move)

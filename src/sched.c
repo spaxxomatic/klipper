@@ -318,6 +318,9 @@ void
 sched_shutdown(uint_fast8_t reason)
 {
     irq_disable();
+    //nutiu dbg
+    PORTB ^= ( 1 << PB1 ); 
+    PORTB ^= ( 1 << PB0 ); 
     longjmp(shutdown_jmp, reason);
 }
 

@@ -12,7 +12,7 @@
 #include "board/pgm.h" // READP
 #include "command.h" // DECL_CONSTANT
 #include "sched.h" // sched_wake_tasks
-#include "serial_irq.h" // serial_enable_tx_irq
+#include "serial_irq.h" // raise_master_data_transfer_irq
 
 #define RX_BUFFER_SIZE 192
 
@@ -26,8 +26,9 @@ DECL_CONSTANT("RECEIVE_WINDOW", RX_BUFFER_SIZE);
 void
 serial_rx_byte(uint_fast8_t data)
 {
-    if (data == MESSAGE_SYNC)
+    if (data == MESSAGE_SYNC){
         sched_wake_tasks();
+    }
     if (receive_pos >= sizeof(receive_buf))
         // Serial overflow - ignore it as crc error will force retransmit
         return;
@@ -35,14 +36,16 @@ serial_rx_byte(uint_fast8_t data)
 }
 
 // Tx interrupt - get next byte to transmit
+// Will return number of bytes left in buffer or -1 if all data sent
 int
 serial_get_tx_byte(uint8_t *pdata)
 {
     if (transmit_pos >= transmit_max)
         return -1;
     *pdata = transmit_buf[transmit_pos++];
-    return 0;
+    return transmit_max - transmit_pos;
 }
+
 
 // Remove from the receive buffer the given number of bytes
 static void
@@ -109,7 +112,7 @@ console_sendf(const struct command_encoder *ce, va_list args)
         memmove(&transmit_buf[0], &transmit_buf[tpos], tmax);
         writeb(&transmit_pos, 0);
         writeb(&transmit_max, tmax);
-        serial_enable_tx_irq();
+        //raise_master_data_transfer_irq();
     }
 
     // Generate message
@@ -118,5 +121,5 @@ console_sendf(const struct command_encoder *ce, va_list args)
 
     // Start message transmit
     writeb(&transmit_max, tmax + msglen);
-    serial_enable_tx_irq();
+    //raise_master_data_transfer_irq();
 }

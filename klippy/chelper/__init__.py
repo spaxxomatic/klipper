@@ -95,7 +95,8 @@ defs_serialqueue = """
         int len;
         double sent_time, receive_time;
     };
-
+    
+    struct serialqueue *spiqueue_alloc(char* spi_device, int write_only);
     struct serialqueue *serialqueue_alloc(int serial_fd, int write_only);
     void serialqueue_exit(struct serialqueue *sq);
     void serialqueue_free(struct serialqueue *sq);
@@ -152,6 +153,9 @@ def check_build_code(srcdir, target, sources, cmd, other_files=[]):
         logging.info("Building C code module %s", target)
         srcfiles = [os.path.join(srcdir, fname) for fname in sources]
         destlib = os.path.join(srcdir, target)
+        logging.info("----------------")
+        logging.info(cmd % (destlib, ' '.join(srcfiles)))
+        logging.info("----------------")
         os.system(cmd % (destlib, ' '.join(srcfiles)))
 
 FFI_main = None

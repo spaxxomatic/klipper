@@ -45,6 +45,10 @@ struct pull_queue_message {
 };
 
 struct serialqueue;
+
+void
+handle_rx_data(struct serialqueue *sq, char* data, int len);
+
 struct serialqueue *serialqueue_alloc(int serial_fd, int write_only);
 void serialqueue_exit(struct serialqueue *sq);
 void serialqueue_free(struct serialqueue *sq);

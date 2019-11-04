@@ -9,13 +9,34 @@
 #include "board/serial_irq.h" // serial_rx_byte
 #include "command.h" // DECL_CONSTANT_STR
 #include "sched.h" // DECL_INIT
+#include "gpio.h" // spi_setup
+#include "internal.h" // GPIO
+#include "pgm.h" // READP
+
+#if CONFIG_MACH_atmega168 || CONFIG_MACH_atmega328 || CONFIG_MACH_atmega328p
+static const uint8_t MISO = GPIO('B', 4), MOSI = GPIO('B', 3);
+static const uint8_t SCK = GPIO('B', 5), SS = GPIO('B', 2);
+static const uint8_t TX_REQ_PIN = GPIO('B', 1);
+DECL_CONSTANT_STR("BUS_PINS_spi", "PB4,PB3,PB5");
+#elif CONFIG_MACH_atmega644p || CONFIG_MACH_atmega1284p
+static const uint8_t MISO = GPIO('B', 6), MOSI = GPIO('B', 5);
+static const uint8_t SCK = GPIO('B', 7), SS = GPIO('B', 4);
+DECL_CONSTANT_STR("BUS_PINS_spi", "PB6,PB5,PB7");
+#elif CONFIG_MACH_at90usb1286 || CONFIG_MACH_at90usb646 \
+      || CONFIG_MACH_atmega32u4 || CONFIG_MACH_atmega1280 \
+      || CONFIG_MACH_atmega2560
+static const uint8_t MISO = GPIO('B', 3), MOSI = GPIO('B', 2);
+static const uint8_t SCK = GPIO('B', 1), SS = GPIO('B', 0);
+DECL_CONSTANT_STR("BUS_PINS_spi", "PB3,PB2,PB1");
+#endif
+
 
 // Reserve serial pins
 #if CONFIG_SERIAL_PORT == 0
  #if CONFIG_MACH_atmega1280 || CONFIG_MACH_atmega2560
 DECL_CONSTANT_STR("RESERVE_PINS_serial", "PE0,PE1");
  #else
-DECL_CONSTANT_STR("RESERVE_PINS_serial", "PD0,PD1");
+DECL_CONSTANT_STR("RESERVE_PINS_serial", "PD1,PD0");
  #endif
 #elif CONFIG_SERIAL_PORT == 1
 DECL_CONSTANT_STR("RESERVE_PINS_serial", "PD2,PD3");
@@ -52,6 +73,7 @@ DECL_CONSTANT_STR("RESERVE_PINS_serial", "PJ0,PJ1");
 #define USARTx_UDRE_vect AVR_SERIAL_REG(USART, CONFIG_SERIAL_PORT, _UDRE_vect)
 #endif
 
+/*
 void
 serial_init(void)
 {
@@ -62,13 +84,97 @@ serial_init(void)
     UCSRxB = (1<<RXENx) | (1<<TXENx) | (1<<RXCIEx) | (1<<UDRIEx);
 }
 DECL_INIT(serial_init);
+*/
+struct gpio_out tx_req_pin;
+void
+spi_init(void)
+{
+    //gpio_out_setup(SS, 0);
+    gpio_in_setup(SCK, 0);
+    gpio_in_setup(MOSI, 0);
+    gpio_out_setup(MISO, 0);      
+  //setup spi as slave
+  //pinMode(MISO,OUTPUT);
 
+  //pinMode(MISO,OUTPUT);     
+   SPCR=(1<<SPE)|(1<<SPIE);  // Turn on SPI in Slave Mode, turn on interrupt
+  //digitalWrite(TX_REQ_PIN, LOW);  
+  //pinMode(TX_REQ_PIN, OUTPUT);
+   tx_req_pin = gpio_out_setup(TX_REQ_PIN, 0);      
+}
+DECL_INIT(spi_init);
 // Rx interrupt - data available to be read.
-ISR(USARTx_RX_vect)
+/*ISR(USARTx_RX_vect)
 {
     serial_rx_byte(UDRx);
+}*/
+/*
+ISR (SPI_STC_vect)
+{  
+  static uint8_t bSendPayload = 0;
+  serial_rx_byte( SPDR);  // grab byte from SPI Data Register
+  //since the SPI is bidirectional, we can send back some data
+  //we tell the master how much data we have to send
+  
+  //When MESSAGE_SYNC comes, we transmit the buffer 
+  //In order to sync the MCU TX buffer with the master RX buff, we send the legth of the transmit buff
+  //The master will take care to pick all bytes from the RX buff
+  if (data == MESSAGE_SYNC){
+    if (transmit_pos >= transmit_max){
+        //nothing to transmit
+        SPDR = 0;
+        bSendPayload = 0;
+    }else{
+        if (likely(bSendPayload)){
+            SPDR = transmit_buf[transmit_pos++];
+        }else{
+            SPDR = transmit_max - transmit_pos; //send the no of bytes in the tx buff
+            bSendPayload = 1;
+        }
+    }
+  } else SPDR = 0;
+}
+*/
+ISR (SPI_STC_vect)
+{  
+  //gpio_out_write(tx_req_pin, 0); //if we asked for data pick, this was it
+  //static uint8_t bSendPayload = 0;
+  PORTB &= ~(1<<PB1) | (1<<PB0) ;
+  uint_fast8_t data = SPDR;
+  if (data != 0xFF)
+    serial_rx_byte( data);
+  //since the SPI is bidirectional, we can send back some data  
+  int ret = serial_get_tx_byte(&SPDR);
+  if (ret<0){
+        SPDR = 0xFF;
+  }else{
+      //SPDR = txdata;
+      //SPDR = 0x99;
+      if (data == MESSAGE_SYNC) {
+        //end of transmission, check if we still have data to send
+        //SPDR = MESSAGE_SYNC;
+        if (ret>0){
+          //tell master there is still data to pick 
+          //raise_master_data_transfer_irq();
+          PORTB |= (1<<PB1) | (1<<PB0) ;
+        }
+      }
+  }
+  //      SPDR = data;
 }
 
+/*
+void send_char_spi()
+{
+    uint8_t data;
+    int ret = serial_get_tx_byte(&data);
+    if (ret) //end of data
+        digitalWrite(TX_REQ_PIN, LOW); //equivalent of disable interrupt
+    else
+        SPDR = data;
+}
+*/
+/*
 // Tx interrupt - data can be written to serial.
 ISR(USARTx_UDRE_vect)
 {
@@ -79,10 +185,18 @@ ISR(USARTx_UDRE_vect)
     else
         UDRx = data;
 }
-
+*/
 // Enable tx interrupts
+/*
 void
 serial_enable_tx_irq(void)
 {
     UCSRxB |= 1<<UDRIEx;
+}
+*/
+//nutiu
+inline void
+raise_master_data_transfer_irq(void) //signal raspi to pick up data
+{
+    gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
 }

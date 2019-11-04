@@ -23,9 +23,13 @@
 #include <string.h> // memset
 #include <termios.h> // tcflush
 #include <unistd.h> // pipe
+#include <linux/types.h>
+#include <sys/ioctl.h>
+
 #include "compiler.h" // __visible
 #include "list.h" // list_add_tail
 #include "pyhelper.h" // get_monotonic
+#include "spi_mcu_comm.h" // spi comm functions
 #include "serialqueue.h" // struct queue_message
 
 
@@ -219,6 +223,7 @@ crc16_ccitt(uint8_t *buf, uint8_t len)
 static int
 check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
 {
+    printf("nutiu cm ns %i\n", *need_sync);
     if (buf_len < MESSAGE_MIN)
         // Need more data
         return 0;
@@ -238,12 +243,15 @@ check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
     uint16_t msgcrc = ((buf[msglen-MESSAGE_TRAILER_CRC] << 8)
                        | (uint8_t)buf[msglen-MESSAGE_TRAILER_CRC+1]);
     uint16_t crc = crc16_ccitt(buf, msglen-MESSAGE_TRAILER_SIZE);
-    if (crc != msgcrc)
+    if (crc != msgcrc){
+        printf("nutiu Crc err\n");
         goto error;
+    }
     return msglen;
 
 error: ;
     // Discard bytes until next SYNC found
+    printf("nutiu Look for sync\n");
     uint8_t *next_sync = memchr(buf, MESSAGE_SYNC, buf_len);
     if (next_sync) {
         *need_sync = 0;
@@ -533,12 +541,65 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     }
 }
 
-// Callback for input activity on the serial fd
-static void
-input_event(struct serialqueue *sq, double eventtime)
+
+//Processes a chunk of data received via SPI 
+void
+handle_rx_data(struct serialqueue *sq, char* data, int len)
 {
+    //nutiu read
+    //int ret = read(sq->serial_fd, &sq->input_buf[sq->input_pos]
+    //               , sizeof(sq->input_buf) - sq->input_pos);
+    
+    //TODO nutiu look in the buffer for the real payload length
+	//uint8_t datalen = data[0];
+    double eventtime = get_monotonic(); 
+    int ret = 1;
+    int copy_len = len;
+    //copy the data to the sq buffer
+    if (len >= sizeof(sq->input_buf) - sq->input_pos){ 
+        //if not enough space in the buffer
+        copy_len = sizeof(sq->input_buf) - sq->input_pos; 
+    }
+    memcpy(&sq->input_buf[sq->input_pos], data, copy_len);
+     printf("nutiu Copied %i bytes\n", len);
+    sq->input_pos += copy_len;
+    
+    for (;;) {
+        ret = check_message(&sq->need_sync, sq->input_buf, sq->input_pos);
+        if (!ret)
+            // Need more data
+            printf("nutiu Need more data\n");
+            return;
+        if (ret > 0) {
+            // Received a valid message
+            printf("nutiu Valid msg\n");
+            pthread_mutex_lock(&sq->lock);
+            handle_message(sq, eventtime, ret);
+            sq->bytes_read += ret;
+            pthread_mutex_unlock(&sq->lock);
+        } else {
+            // Skip bad data at beginning of input
+            printf("Invalid data\n");
+            ret = -ret;
+            pthread_mutex_lock(&sq->lock);
+            sq->bytes_invalid += ret;
+            pthread_mutex_unlock(&sq->lock);
+        }
+        sq->input_pos -= ret;
+        if (sq->input_pos)
+            memmove(sq->input_buf, &sq->input_buf[ret], sq->input_pos);
+    }
+}
+
+// Callback for input activity on the serial fd
+
+static void
+unused_input_event(struct serialqueue *sq, double eventtime)
+{
+    //nutiu read
     int ret = read(sq->serial_fd, &sq->input_buf[sq->input_pos]
                    , sizeof(sq->input_buf) - sq->input_pos);
+
     if (ret <= 0) {
         report_errno("read", ret);
         pollreactor_do_exit(&sq->pr);
@@ -584,14 +645,15 @@ kick_event(struct serialqueue *sq, double eventtime)
 static double
 retransmit_event(struct serialqueue *sq, double eventtime)
 {
-    int ret = tcflush(sq->serial_fd, TCOFLUSH);
-    if (ret < 0)
-        report_errno("tcflush", ret);
+    //nutiu !! what to do with spi? has no tcflush
+    //int ret = tcflush(sq->serial_fd, TCOFLUSH);
+    //if (ret < 0)
+    //    report_errno("tcflush", ret);
 
     pthread_mutex_lock(&sq->lock);
 
     // Retransmit all pending messages
-    uint8_t buf[MESSAGE_MAX * MESSAGE_SEQ_MASK + 1];
+    char buf[MESSAGE_MAX * MESSAGE_SEQ_MASK + 1];
     int buflen = 0, first_buflen = 0;
     buf[buflen++] = MESSAGE_SYNC;
     struct queue_message *qm;
@@ -601,7 +663,8 @@ retransmit_event(struct serialqueue *sq, double eventtime)
         if (!first_buflen)
             first_buflen = qm->len + 1;
     }
-    ret = write(sq->serial_fd, buf, buflen);
+    
+    int ret = spi_write(sq, buf, buflen, 1);
     if (ret < 0)
         report_errno("retransmit write", ret);
     sq->bytes_retransmit += buflen;
@@ -609,12 +672,14 @@ retransmit_event(struct serialqueue *sq, double eventtime)
     // Update rto
     if (pollreactor_get_timer(&sq->pr, SQPT_RETRANSMIT) == PR_NOW) {
         // Retransmit due to nak
+        printf("nutiu Retransmit nak\n");
         sq->ignore_nak_seq = sq->receive_seq;
         if (sq->receive_seq < sq->retransmit_seq)
             // Second nak for this retransmit - don't allow third
             sq->ignore_nak_seq = sq->retransmit_seq;
     } else {
         // Retransmit due to timeout
+        printf("nutiu Retransmit timeout\n");
         sq->rto *= 2.0;
         if (sq->rto > MAX_RTO)
             sq->rto = MAX_RTO;
@@ -652,6 +717,7 @@ build_and_send_command(struct serialqueue *sq, double eventtime)
                 }
             }
         }
+        
         // Append message to outgoing command
         if (out->len + qm->len > sizeof(out->msg) - MESSAGE_TRAILER_SIZE)
             break;
@@ -674,8 +740,7 @@ build_and_send_command(struct serialqueue *sq, double eventtime)
     out->msg[out->len - MESSAGE_TRAILER_CRC+1] = crc & 0xff;
     out->msg[out->len - MESSAGE_TRAILER_SYNC] = MESSAGE_SYNC;
 
-    // Send message
-    int ret = write(sq->serial_fd, out->msg, out->len);
+    int ret = spi_write(sq, (char*) out->msg, out->len, 0);
     if (ret < 0)
         report_errno("write", ret);
     sq->bytes_write += out->len;
@@ -811,8 +876,10 @@ serialqueue_alloc(int serial_fd, int write_only)
     if (ret)
         goto fail;
     pollreactor_setup(&sq->pr, SQPF_NUM, SQPT_NUM, sq);
-    if (!write_only)
-        pollreactor_add_fd(&sq->pr, SQPF_SERIAL, serial_fd, input_event);
+    //nutiu - when in SPI mode, polling the POLLIN or POLLHUP will not work since the SPI is amster-slave
+    // The slave will set a pin when there is data to be read
+    //if (!write_only)
+    //    pollreactor_add_fd(&sq->pr, SQPF_SERIAL, serial_fd, input_event);
     pollreactor_add_fd(&sq->pr, SQPF_PIPE, sq->pipe_fds[0], kick_event);
     pollreactor_add_timer(&sq->pr, SQPT_RETRANSMIT, retransmit_event);
     pollreactor_add_timer(&sq->pr, SQPT_COMMAND, command_event);
@@ -827,7 +894,8 @@ serialqueue_alloc(int serial_fd, int write_only)
         sq->rto = PR_NEVER;
     } else {
         sq->receive_seq = 1;
-        sq->rto = MIN_RTO;
+        //nutiu sq->rto = MIN_RTO;
+        sq->rto = 100*MIN_RTO;
     }
 
     // Queues
@@ -866,6 +934,7 @@ serialqueue_exit(struct serialqueue *sq)
 {
     pollreactor_do_exit(&sq->pr);
     kick_bg_thread(sq);
+    //close_spi();
     int ret = pthread_join(sq->tid, NULL);
     if (ret)
         report_errno("pthread_join", ret);
