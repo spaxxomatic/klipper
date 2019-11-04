@@ -135,33 +135,27 @@ ISR (SPI_STC_vect)
   } else SPDR = 0;
 }
 */
+static uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
 ISR (SPI_STC_vect)
 {  
   //gpio_out_write(tx_req_pin, 0); //if we asked for data pick, this was it
-  //static uint8_t bSendPayload = 0;
-  PORTB &= ~(1<<PB1) | (1<<PB0) ;
-  uint_fast8_t data = SPDR;
-  if (data != 0xFF)
-    serial_rx_byte( data);
-  //since the SPI is bidirectional, we can send back some data  
-  int ret = serial_get_tx_byte(&SPDR);
-  if (ret<0){
-        SPDR = 0xFF;
+  if (bTransmitting){
+    int ret = serial_get_tx_byte(&SPDR);
+    if (ret<0){
+            SPDR = 0xFF;
+            PORTB &= ~(1<<PB1) | (1<<PB0) ;
+            bTransmitting = 0;
+    }
   }else{
-      //SPDR = txdata;
-      //SPDR = 0x99;
-      if (data == MESSAGE_SYNC) {
-        //end of transmission, check if we still have data to send
-        //SPDR = MESSAGE_SYNC;
-        if (ret>0){
-          //tell master there is still data to pick 
-          //raise_master_data_transfer_irq();
-          PORTB |= (1<<PB1) | (1<<PB0) ;
+        //uint_fast8_t data = SPDR;
+        serial_rx_byte( SPDR);
+        if (SPDR == MESSAGE_SYNC) {
+            bTransmitting = 1; //we start transmitting after a sync
+            SPDR = get_tx_buff_len(); //the transmitter knows that the next byte is the buff len
         }
-      }
   }
-  //      SPDR = data;
-}
+ }
+
 
 /*
 void send_char_spi()

@@ -49,6 +49,8 @@ struct serialqueue;
 void
 handle_rx_data(struct serialqueue *sq, char* data, int len);
 
+void kick_mcu_data_transfer(struct serialqueue *sq);
+
 struct serialqueue *serialqueue_alloc(int serial_fd, int write_only);
 void serialqueue_exit(struct serialqueue *sq);
 void serialqueue_free(struct serialqueue *sq);

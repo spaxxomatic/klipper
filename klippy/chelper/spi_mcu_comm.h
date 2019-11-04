@@ -12,8 +12,13 @@ struct serialqueue;
 struct serialqueue * spiqueue_alloc(char* spi_device, int write_only);
 void close_spi() ;
 
-int spi_read();
-int spi_write(struct serialqueue *sq, char* tx_buff, int len, int is_retransmit);
+//int spi_read();
+
+double
+spi_read(struct serialqueue *sq, double eventtime);
+
+int spi_write(struct serialqueue *sq, char* tx_buff,
+                     int len, int is_retransmit);
 
 
 #endif

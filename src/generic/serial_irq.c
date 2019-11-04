@@ -40,12 +40,21 @@ serial_rx_byte(uint_fast8_t data)
 int
 serial_get_tx_byte(uint8_t *pdata)
 {
-    if (transmit_pos >= transmit_max)
+    if (transmit_pos >= transmit_max){
         return -1;
+    }
     *pdata = transmit_buf[transmit_pos++];
     return transmit_max - transmit_pos;
 }
 
+inline uint8_t
+get_tx_buff_len()
+{
+    if (transmit_pos >= transmit_max){
+        return 0;
+    }else 
+        return transmit_max - transmit_pos;
+}
 
 // Remove from the receive buffer the given number of bytes
 static void
@@ -112,7 +121,9 @@ console_sendf(const struct command_encoder *ce, va_list args)
         memmove(&transmit_buf[0], &transmit_buf[tpos], tmax);
         writeb(&transmit_pos, 0);
         writeb(&transmit_max, tmax);
-        //raise_master_data_transfer_irq();
+        
+        //nutiu
+        raise_master_data_transfer_irq();
     }
 
     // Generate message
@@ -121,5 +132,5 @@ console_sendf(const struct command_encoder *ce, va_list args)
 
     // Start message transmit
     writeb(&transmit_max, tmax + msglen);
-    //raise_master_data_transfer_irq();
+    raise_master_data_transfer_irq();
 }

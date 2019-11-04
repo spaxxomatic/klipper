@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "STEPCOMPRESS.C": "cpp",
-        "SPI_MCU_COMM.C": "cpp"
+        "SPI_MCU_COMM.C": "cpp",
+        "SERIALQUEUE.C": "cpp"
     }
 }

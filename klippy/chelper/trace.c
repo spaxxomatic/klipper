@@ -12,7 +12,7 @@ void set_trace_level(uint8_t  t){
 }
 
 
-static void trace_msg(uint8_t level, const char* fmt, ...){
+void trace_msg(uint8_t level, const char* fmt, ...){
     if (level <= trace_level){
         va_list args;
         va_start(args, fmt);
@@ -22,7 +22,7 @@ static void trace_msg(uint8_t level, const char* fmt, ...){
     }
 }
 
-static void pabort(const char *s)
+void pabort(const char *s)
 {
 	perror("FATAL: ");
     perror(s);

@@ -23,15 +23,21 @@
 #include "trace.h"
 
 int spi_fd = 0;
-struct serialqueue* thissq;
+
+//yes, global variable, absolute buggy in case we have more than one SPI interface
+struct serialqueue* thissq = 0; 
+
 //extern struct serialqueue * serialqueue_alloc(int serial_fd, int write_only);
 //extern void handle_rx_data(struct serialqueue *sq, char* data, int len);
 
-
 // Handler for pin interrupt
 void handleSlaveIrq(void) {
-    trace_msg(1,"Slave IRQ");
-    spi_read();
+    trace_msg(1,"Slave IRQ\n");
+    //spi_read();
+    if (thissq){ //in case we're getting an irq before being inistialized
+        //schedule a data transmission
+        kick_mcu_data_transfer(thissq);
+    }
 }
 
 int irqHasBeenSetup = 0;
@@ -141,8 +147,10 @@ void cleanup_and_send(char* buff, int len){
         handle_rx_data(thissq, rx_clean_buff, j);
     free(rx_clean_buff);
 }
+
 //handler for slave data tranfer requests
-int spi_read()
+double
+spi_read(struct serialqueue *sq, double eventtime)
 {
 	int ret = 0;    
     //char* spi_buff = malloc(len+1); 
@@ -169,7 +177,6 @@ int spi_read()
 	if (ret < 1) {
         pabort("can't read spi message");
     }else{
-        //the first byte is dirt because of the way SPI works, so the second one is our status
         trace_msg(2,"RX: ");
         int i = 0;
         for ( i = 0; i < len; i++) {
@@ -188,7 +195,7 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
 	int ret = 0;
     int len = 48;
     char* rx_buff = malloc(len); //when we write len bytes, we can receive len-1
-    char* tx_buff = malloc(len); //when we write len bytes, we can receive len-1
+    char* tx_buff = malloc(len); 
 
     memset(rx_buff, 0xFF, len);
     memset(tx_buff, 0xFF, len);
@@ -223,47 +230,7 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
         }
         printf("\r\n");
                 
-        cleanup_and_send(rx_buff, len);
-    }
-    free(rx_buff);
-    return ret;
-}
-
-int _orig_spi_write(struct serialqueue *sq, char* tx_buff, int len, int is_retransmit)
-{
-	int ret = 0;
-    char* rx_buff = malloc(len); //when we write len bytes, we can receive len-1
-
-	struct spi_ioc_transfer tr = {
-		.tx_buf = (unsigned long)tx_buff,
-		.rx_buf = (unsigned long)rx_buff,
-		.len = len,
-		.delay_usecs = SPI_DELAY,
-		.speed_hz = SPI_SPEED,
-		.bits_per_word = SPI_BITS,
-	};
-
-	ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr, len);
-    int i = 0;
-	if (ret < 1) {
-        trace_msg(0,"can't send spi message");
-        ret = -1;
-    }else{
-
-        trace_msg(2,"TX%i ", len);
-        
-        for ( i = 0; i < len; i++) {
-            printf("%.2X:", tx_buff[i]);
-        }
-		printf("\r\n");
-        
-        printf("TXR: ");
-        for ( i = 0; i < len; i++) {
-            printf("%.2X:", rx_buff[i]);
-        }
-        printf("\r\n");
-                
-        cleanup_and_send(rx_buff, len);
+        //cleanup_and_send(rx_buff, len);
     }
     free(rx_buff);
     return ret;

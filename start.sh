@@ -1,1 +1,1 @@
-python klippy/klippy.py config/lathe.cfg
+python klippy/klippy.py config/lathe.cfg -v
