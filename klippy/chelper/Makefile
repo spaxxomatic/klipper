@@ -4,6 +4,7 @@ MD := mkdir
 RM := rm -f
 CP := cp
 
+
 TARGETLIB := c_helper.so
 EXTRA_CFLAGS :=  -Wall -g -O2 -shared -fPIC -flto -fwhole-program 
 
@@ -26,9 +27,25 @@ list_objects:
 DEP = $(OBJ:.o=.d)
 -include $(OBJ:.o=.d)
 
+uname := $(shell uname -p) #detect if we're crosscompiling 
+
+
+ifneq (,$(findstring arm,$(uname_p)))
+
+endif
+
+ifneq ($(TARGET), arm)
 CC := gcc
+else
+ARMTOOLDIR := $(HOME)/raspitools
+CC := arm-linux-gnueabihf-gcc 
+#we must also set the includes and lib path
+INCLUDEDIR := -I$(ARMTOOLDIR)/include -I$(ARMTOOLDIR)/include/wiringPi
+LD_PATH := -L$(ARMTOOLDIR)/usr/lib -L$(ARMTOOLDIR)/lib
+endif
 
 .PHONY: prepare list_objects prepare_mock gccversion clean install
+
 
 clean:
 	$(RM)r $(TARGET_DIR)
@@ -41,7 +58,7 @@ prepare:
 build: $(SRC) $(OBJ) 
 
 link:
-	$(CC) $(LDFLAGS) $(EXTRA_CFLAGS)  -o $(TARGETLIB) $(OBJ) $(LIB_LIST)
+	$(CC) $(LDFLAGS) $(EXTRA_CFLAGS)  $(LD_PATH) -o $(TARGETLIB) $(OBJ) $(LIB_LIST)
 
 LIB_LIST = -lpthread -lwiringPi
 
@@ -63,6 +80,6 @@ gccversion:
 	
 $(TARGET_DIR)/%.o : %.c
 	@echo "Compiling $< " 
-	$(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
+	$(CC) $(INCLUDEDIR) -c $(CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
 
 all: gccversion prepare build link 

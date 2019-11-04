@@ -31,7 +31,7 @@
 #include "pyhelper.h" // get_monotonic
 #include "spi_mcu_comm.h" // spi comm functions
 #include "serialqueue.h" // struct queue_message
-
+#include "trace.h"
 
 /****************************************************************
  * Poll reactor
@@ -223,7 +223,7 @@ crc16_ccitt(uint8_t *buf, uint8_t len)
 static int
 check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
 {
-    printf("nutiu cm ns %i\n", *need_sync);
+    trace(3,"nutiu cm ns %i\n", *need_sync);
     if (buf_len < MESSAGE_MIN)
         // Need more data
         return 0;
@@ -244,14 +244,14 @@ check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
                        | (uint8_t)buf[msglen-MESSAGE_TRAILER_CRC+1]);
     uint16_t crc = crc16_ccitt(buf, msglen-MESSAGE_TRAILER_SIZE);
     if (crc != msgcrc){
-        printf("nutiu Crc err\n");
+        trace(3,"nutiu Crc err\n");
         goto error;
     }
     return msglen;
 
 error: ;
     // Discard bytes until next SYNC found
-    printf("nutiu Look for sync\n");
+    trace(3,"nutiu Look for sync\n");
     uint8_t *next_sync = memchr(buf, MESSAGE_SYNC, buf_len);
     if (next_sync) {
         *need_sync = 0;
