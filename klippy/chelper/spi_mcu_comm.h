@@ -9,7 +9,7 @@
 #define SPI_BITS 8
 
 struct serialqueue;
-struct serialqueue * spiqueue_alloc(char* spi_device, int write_only);
+struct serialqueue * spiqueue_alloc(char* spi_device, int write_only, uint32_t speed);
 void close_spi() ;
 
 //int spi_read();

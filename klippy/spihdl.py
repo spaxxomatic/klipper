@@ -84,7 +84,7 @@ class SerialReader:
             #nutiu if self.baud:
             #nutiu     stk500v2_leave(self.ser, self.reactor)
             self.serialqueue = self.ffi_lib.spiqueue_alloc(
-                '/dev/spidev0.0', 0)
+                '/dev/spidev0.0', 0, self.baud)
             self.background_thread = threading.Thread(target=self._bg_thread)
             self.background_thread.start()
             # Obtain and load the data dictionary from the firmware

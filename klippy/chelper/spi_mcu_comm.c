@@ -42,6 +42,10 @@ void handleSlaveIrq(void) {
 
 int irqHasBeenSetup = 0;
 
+uint8_t spi_mode = SPI_MODE_0;
+uint8_t spi_bits = SPI_BITS;
+uint32_t spi_speed ;
+
 void setupSlaveIrq(){
     if (irqHasBeenSetup) return;
     wiringPiSetup();
@@ -66,7 +70,7 @@ void prepare_read_buff(){
     memset(&xfer[0], 0, sizeof (xfer[0]));
     memset(&xfer[1], 0, sizeof (xfer[1]));
 	xfer[0].delay_usecs = SPI_DELAY;
-	xfer[0].speed_hz = SPI_SPEED;
+	xfer[0].speed_hz = spi_speed;
 	xfer[0].bits_per_word = SPI_BITS;
 
 }
@@ -83,11 +87,8 @@ void __visible close_spi() {
     }
 }
 
-int setup_spi_comm(char* spi_device){
-    uint8_t spi_mode = SPI_MODE_0;
-    uint8_t spi_bits = SPI_BITS;
-    uint32_t spi_speed = SPI_SPEED; //TODO: move to the ini file
-
+int setup_spi_comm(char* spi_device, uint32_t speed){
+    spi_speed = speed;
 	if (spi_fd != 0) {
 		if (fd_is_valid(spi_fd))
 			return spi_fd;
@@ -193,39 +194,51 @@ spi_read(struct serialqueue *sq, double eventtime)
 int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retransmit)
 {
 	int ret = 0;
-    int len = 48;
-    char* rx_buff = malloc(len); //when we write len bytes, we can receive len-1
-    char* tx_buff = malloc(len); 
-
-    memset(rx_buff, 0xFF, len);
-    memset(tx_buff, 0xFF, len);
-    memcpy(tx_buff,inp_buff, buff_len);
-
+    
+    char* rx_buff = malloc(buff_len+1); //when we write len bytes, we can receive len-1
+    
+    //locate the MESSAGE_SYNC in the message, 
+    //needed because the next received byte contains the length of the remote transmit buffer
+    int sync_pos = -1;
+    char* pos_first_sync =  memchr (inp_buff, MESSAGE_SYNC, buff_len);
+    if (pos_first_sync!=NULL){
+        sync_pos = pos_first_sync-inp_buff+1;
+        trace_msg(3, "syn found at position %d.\n", sync_pos);
+    }
+    
 	struct spi_ioc_transfer tr = {
-		.tx_buf = (unsigned long)tx_buff,
+		.tx_buf = (unsigned long)inp_buff,
 		.rx_buf = (unsigned long)rx_buff,
-		.len = len,
+		.len = buff_len,
 		.delay_usecs = SPI_DELAY,
-		.speed_hz = SPI_SPEED,
+		.speed_hz = spi_speed,
 		.bits_per_word = SPI_BITS,
 	};
-
-	ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr, len);
+    
+    if (sync_pos==buff_len){ //send one more byte, so that we receive the remote buff len
+        tr.len += 1;
+        //the ioctl will of course read  over the end of the inp_puff, but one byte is not a big deal :) :) 
+    }
+	
+    ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
+    if (sync_pos >=0){
+        trace_msg(3, "Remote blen is %i\n",rx_buff[sync_pos]);
+    }
     int i = 0;
 	if (ret < 1) {
-        trace_msg(0,"can't send spi message");
+        trace_msg(0,"can't send spi message\n");
         ret = -1;
     }else{
 
-        trace_msg(2,"TX%i ", len);
+        trace_msg(2,"TX%i ", tr.len);
         
-        for ( i = 0; i < len; i++) {
-            printf("%.2X:", tx_buff[i]);
+        for ( i = 0; i < tr.len; i++) {
+            printf("%.2X:", inp_buff[i]);
         }
 		printf("\r\n");
         
         printf("TXR: ");
-        for ( i = 0; i < len; i++) {
+        for ( i = 0; i < tr.len; i++) {
             printf("%.2X:", rx_buff[i]);
         }
         printf("\r\n");
@@ -237,8 +250,8 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
 }
 
 struct serialqueue * __visible
-spiqueue_alloc(char* spi_device, int write_only)
+spiqueue_alloc(char* spi_device, int write_only, uint32_t speed)
 {
-    thissq = serialqueue_alloc(setup_spi_comm(spi_device), write_only);   
+    thissq = serialqueue_alloc(setup_spi_comm(spi_device, speed), write_only);   
 	return thissq;
 }
