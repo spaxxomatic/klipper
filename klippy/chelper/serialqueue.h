@@ -46,8 +46,8 @@ struct pull_queue_message {
 
 struct serialqueue;
 
-void
-handle_rx_data(struct serialqueue *sq, char* data, int len);
+double
+transfer_mcu_data(struct serialqueue *sq, char* data, int len);
 
 void kick_mcu_data_transfer(struct serialqueue *sq);
 

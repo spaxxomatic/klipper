@@ -135,6 +135,7 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime)
             struct pollreactor_timer *timer = &pr->timers[i];
             double t = timer->waketime;
             if (eventtime >= t) {
+                trace_msg(2, "Calling timer cbk %i for %i", timer->callback, i);
                 t = timer->callback(pr->callback_data, eventtime);
                 timer->waketime = t;
             }
@@ -448,18 +449,21 @@ check_wake_receive(struct serialqueue *sq)
 }
 
 // Wake up the data transfer thread we received an interrupt
-static void
+/*static void
 check_mcu_data_pending(struct serialqueue *sq)
 {
+    trace_msg(1,"Ck data pend\n");
     if (sq->mcu_data_pending) {
         sq->mcu_data_pending = 0;
+        trace_msg(1,"Ck timer NOW\n");
         pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NOW);
     }
 }
-
+*/
 void kick_mcu_data_transfer(struct serialqueue *sq)
 {
     sq->mcu_data_pending = 1;
+    pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NOW);
 }
 
 // Write to the internal pipe to wake the background thread if in poll
@@ -573,8 +577,8 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
 
 
 //Processes a chunk of data received via SPI 
-void
-handle_rx_data(struct serialqueue *sq, char* data, int len)
+double
+transfer_mcu_data(struct serialqueue *sq, double eventtime)
 {
     //nutiu read
     //int ret = read(sq->serial_fd, &sq->input_buf[sq->input_pos]
@@ -583,6 +587,11 @@ handle_rx_data(struct serialqueue *sq, char* data, int len)
     //TODO nutiu look in the buffer for the real payload length
 	//uint8_t datalen = data[0];
     double eventtime = get_monotonic(); 
+    int iret = spi_read(sq, eventtime);
+    
+    pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NEVER);
+    trace_msg(3,"nutiu transfer_mcu_data\n");
+    
     int ret = 1;
     int copy_len = len;
     //copy the data to the sq buffer
@@ -599,7 +608,7 @@ handle_rx_data(struct serialqueue *sq, char* data, int len)
         if (!ret){
             // Need more data
             trace_msg(3,"nutiu Need more data \n");
-            return;
+            return eventtime;
         }
         if (ret > 0) {
             // Received a valid message
@@ -620,6 +629,7 @@ handle_rx_data(struct serialqueue *sq, char* data, int len)
         if (sq->input_pos)
             memmove(sq->input_buf, &sq->input_buf[ret], sq->input_pos);
     }
+    return eventtime;
 }
 
 // Callback for input activity on the serial fd
@@ -891,7 +901,6 @@ background_thread(void *data)
     pthread_mutex_lock(&sq->lock);
     check_wake_receive(sq);    
     pthread_mutex_unlock(&sq->lock);
-    check_mcu_data_pending(sq);
     return NULL;
 }
 
@@ -1099,7 +1108,7 @@ serialqueue_encode_and_send(struct serialqueue *sq, struct command_queue *cq
 void __visible
 serialqueue_pull(struct serialqueue *sq, struct pull_queue_message *pqm)
 {
-    trace_msg(3, "serialqueue_pull\n");
+
     pthread_mutex_lock(&sq->lock);
     // Wait for message to be available
     while (list_empty(&sq->receive_queue)) {

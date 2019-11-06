@@ -35,7 +35,7 @@ void handleSlaveIrq(void) {
     trace_msg(1,"Slave IRQ\n");
     //spi_read();
     if (thissq){ //in case we're getting an irq before being inistialized
-        //schedule a data transmission
+        //schedule a data transmission        
         kick_mcu_data_transfer(thissq);
     }
 }
@@ -128,7 +128,8 @@ int setup_spi_comm(char* spi_device, uint32_t speed){
 	return spi_fd;
 }
 
-void cleanup_and_send(char* buff, int len){
+void cleanup_and_handle(){
+    /*int len = spi_read_buff.len;
     char* rx_clean_buff = malloc(len); //when we write len bytes, we can receive len-1
       //handle_rx_data(sq, &rx_buff[1], len-1);
         int i = 0;
@@ -144,14 +145,17 @@ void cleanup_and_send(char* buff, int len){
                 printf("%.2X:", rx_clean_buff[i]);
             }
             printf("\r\n");	
-
-        handle_rx_data(thissq, rx_clean_buff, j);
-    free(rx_clean_buff);
+    */
+    handle_rx_data(thissq, spi_read_buff.data, spi_read_buff.len);
+    spi_read_buff.len = 0;
+    //free(rx_clean_buff);
 }
 
 //handler for slave data tranfer requests
-double
-spi_read(struct serialqueue *sq, double eventtime)
+#define MSG_ENDMARK  0xFF
+
+int
+spi_read(struct serialqueue *sq)
 {
 	int ret = 0;    
     //char* spi_buff = malloc(len+1); 
@@ -161,7 +165,7 @@ spi_read(struct serialqueue *sq, double eventtime)
     int len = 32; //nutiu TODO - this should come from slave
     
     char* buff = malloc(len);
-    memset(buff, 0xFF, len);
+    memset(buff, MSG_ENDMARK, len);
     xfer[0].rx_buf = (unsigned long)buff;
 	xfer[0].len = len;
     xfer[0].tx_buf = (unsigned long)buff;
@@ -181,16 +185,68 @@ spi_read(struct serialqueue *sq, double eventtime)
         trace_msg(2,"RX: ");
         int i = 0;
         for ( i = 0; i < len; i++) {
-            trace_msg(2,"%.2X:", buff[i]);
+            char rbyte = buff[i];
+            trace_msg(2,"%.2X:", rbyte);
+            if (rbyte != 0xFF){
+                spi_read_buff.data[spi_read_buff.len++] = rbyte;
+            }
         }
         trace_msg(2,"\r\n");
     }
     //cleanup_and_send(spi_read_buff.data, len);
-    cleanup_and_send(buff, len);
+    cleanup_and_handle();
     //handle_rx_data(thissq, spi_read_buff.data, len);
     return ret;
 }
 
+
+int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retransmit)
+{
+	int ret = 0;
+    
+    char* rx_buff = malloc(buff_len); //when we write len bytes, we can receive len-1
+    
+	struct spi_ioc_transfer tr = {
+		.tx_buf = (unsigned long)inp_buff,
+		.rx_buf = (unsigned long)rx_buff,
+		.len = buff_len,
+		.delay_usecs = SPI_DELAY,
+		.speed_hz = spi_speed,
+		.bits_per_word = SPI_BITS,
+	};
+
+    ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
+    
+    int i = 0;
+	if (ret < 1) {
+        trace_msg(0,"can't send spi message\n");
+        ret = -1;
+    }else{
+
+        trace_msg(2,"TX%i ", tr.len);
+        
+        for ( i = 0; i < tr.len; i++) {
+            trace_msg(2,"%.2X:", inp_buff[i]);
+        }
+		trace_msg(2,"\r\n");
+        
+        trace_msg(2,"TXR: ");
+        for ( i = 0; i < tr.len; i++) {
+            char rbyte = rx_buff[i];
+            trace_msg(2,"%.2X:", rbyte);
+            if (rbyte != 0xFF){
+                spi_read_buff.data[spi_read_buff.len++] = rbyte;
+            }
+        }
+        trace_msg(2,"\r\n");        
+        //cleanup_and_send(rx_buff, len);
+        
+    }
+    free(rx_buff);
+    return ret;
+}
+
+/*
 int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retransmit)
 {
 	int ret = 0;
@@ -224,6 +280,7 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
     if (sync_pos >=0){
         trace_msg(3, "Remote blen is %i\n",rx_buff[sync_pos]);
     }
+    
     int i = 0;
 	if (ret < 1) {
         trace_msg(0,"can't send spi message\n");
@@ -248,7 +305,7 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
     free(rx_buff);
     return ret;
 }
-
+*/
 struct serialqueue * __visible
 spiqueue_alloc(char* spi_device, int write_only, uint32_t speed)
 {

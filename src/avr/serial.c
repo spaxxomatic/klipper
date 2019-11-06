@@ -135,25 +135,28 @@ ISR (SPI_STC_vect)
   } else SPDR = 0;
 }
 */
+#define MSG_ENDMARK  0xFF
+
 static uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
 ISR (SPI_STC_vect)
 {  
   //gpio_out_write(tx_req_pin, 0); //if we asked for data pick, this was it
-  if (bTransmitting){
+    
+    if (SPDR != MSG_ENDMARK) serial_rx_byte( SPDR);
+    
     int ret = serial_get_tx_byte(&SPDR);
-    if (ret<0){
-            SPDR = 0xFF;
+    if (ret < 0){
+            SPDR = MSG_ENDMARK;
             PORTB &= ~(1<<PB1) | (1<<PB0) ;
-            bTransmitting = 0;
     }
-  }else{
+    /*
         //uint_fast8_t data = SPDR;
-        serial_rx_byte( SPDR);
+  
         if (SPDR == MESSAGE_SYNC) {
             bTransmitting = 1; //we start transmitting after a sync
             SPDR = get_tx_buff_len(); //the transmitter knows that the next byte is the buff len
         }
-  }
+    */
  }
 
 
