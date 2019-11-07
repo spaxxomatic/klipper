@@ -597,8 +597,6 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
     pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NEVER);
     trace_msg(3,"nutiu transfer_mcu_data\n");
     
-    
-    
     pthread_mutex_lock(&sq->lock);
     int copy_len = spi_read_buff.len;
     //copy the data to the sq buffer

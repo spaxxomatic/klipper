@@ -62,7 +62,11 @@ include src/Makefile
 
 ################ Common build rules
 
-$(OUT)%.o: %.c $(OUT)autoconf.h $(OUT)board-link
+$(OUT)%.s: %.c $(OUT)autoconf.h $(OUT)board-link
+	@echo "  Creating asm file for $@"
+	$(Q)$(CC) $(CFLAGS) -S -fverbose-asm $< -o $@
+
+$(OUT)%.o: $(OUT)%.s %.c $(OUT)autoconf.h $(OUT)board-link
 	@echo "  Compiling $@"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 

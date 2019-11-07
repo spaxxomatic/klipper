@@ -137,21 +137,20 @@ ISR (SPI_STC_vect)
 */
 
 static uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
-//uint_fast8_t data = SPDR;
 uint_fast8_t packet_len = 0;
 ISR (SPI_STC_vect)
 {  
-  //gpio_out_write(tx_req_pin, 0); //if we asked for data pick, this was it
-    
+    // ------- receive data ---------
     if (packet_len){
         if (packet_len == MESSAGE_SYNC){ 
-            //well, this byte is not the packet len but he previous SYN. 
-            //Packet len is this one
+            //well, this byte is not really the packet len but he previous SYN. 
+            //Packet len is coming now as it follows the sync byte
             packet_len = SPDR;
         }
          serial_rx_byte( SPDR);
          packet_len--;
     }else{
+        //it must be the begining of the next message
         if (SPDR != MESSAGE_ESCAPE){            
             //must be a packet start or a sync
             //if (SPDR != MESSAGE_SYNC){
@@ -159,48 +158,14 @@ ISR (SPI_STC_vect)
             serial_rx_byte( SPDR);
         }
     }
-    
+    // ------- send data ---------
     int ret = serial_get_tx_byte(&SPDR);
     if (ret < 0){
             SPDR = MESSAGE_ESCAPE;
-            //PORTB &= ~(1<<PB1)  ;
             gpio_out_write(tx_req_pin, 0);  //signal master to send us a status request and pick up the data
     }
  }
 
-
-/*
-void send_char_spi()
-{
-    uint8_t data;
-    int ret = serial_get_tx_byte(&data);
-    if (ret) //end of data
-        digitalWrite(TX_REQ_PIN, LOW); //equivalent of disable interrupt
-    else
-        SPDR = data;
-}
-*/
-/*
-// Tx interrupt - data can be written to serial.
-ISR(USARTx_UDRE_vect)
-{
-    uint8_t data;
-    int ret = serial_get_tx_byte(&data);
-    if (ret)
-        UCSRxB &= ~(1<<UDRIEx);
-    else
-        UDRx = data;
-}
-*/
-// Enable tx interrupts
-/*
-void
-serial_enable_tx_irq(void)
-{
-    UCSRxB |= 1<<UDRIEx;
-}
-*/
-//nutiu
 inline void
 raise_master_data_transfer_irq(void) //signal raspi to pick up data
 {

@@ -57,10 +57,13 @@ prepare:
 #VPATH = $(dir $(MOCK_FILES)) $(dir $(SRC))
 build: $(SRC) $(OBJ) 
 
+ifneq ($(USE_WIRINGPI),)
+LIB_LIST = -lpthread -lwiringPi
+endif
+
 link:
 	$(CC) $(LDFLAGS) $(EXTRA_CFLAGS)  $(LD_PATH) -o $(TARGETLIB) $(OBJ) $(LIB_LIST)
 
-LIB_LIST = -lpthread -lwiringPi
 
 build_mock: 
 	@echo Source files: $(SRC)

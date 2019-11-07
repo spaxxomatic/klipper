@@ -16,7 +16,11 @@
 #include <sys/ioctl.h>
 
 #include "compiler.h" // __visible
+#ifdef USE_WIRINGPI
 #include <wiringPi.h>
+#else
+#include "gpio.h"
+#endif 
 
 #include "serialqueue.h" //MESSAGE_SYNC , serialqueue_alloc, etc
 #include "spi_mcu_comm.h"
@@ -30,6 +34,7 @@ struct serialqueue* thissq = 0;
 //extern struct serialqueue * serialqueue_alloc(int serial_fd, int write_only);
 //extern void handle_rx_data(struct serialqueue *sq, char* data, int len);
 
+#ifdef USE_WIRINGPI
 // Handler for pin interrupt
 void handleSlaveIrq(void) {
     trace_msg(1,"Slave IRQ\n");
@@ -39,20 +44,27 @@ void handleSlaveIrq(void) {
         kick_mcu_data_transfer(thissq);
     }
 }
+#endif 
 
-int irqHasBeenSetup = 0;
+int slaveSignalHasBeenSetup = 0;
 
 uint8_t spi_mode = SPI_MODE_0;
 uint8_t spi_bits = SPI_BITS;
 uint32_t spi_speed ;
 
 void setupSlaveIrq(){
-    if (irqHasBeenSetup) return;
+    if (slaveSignalHasBeenSetup) return;
+    #ifdef USE_WIRINGPI
+    
     wiringPiSetup();
     pinMode(SPI_SLAVE_IRQ_PIN, INPUT);
 	// Bind to interrupt
 	wiringPiISR(SPI_SLAVE_IRQ_PIN, INT_EDGE_FALLING, &handleSlaveIrq);
-    irqHasBeenSetup = 1;
+    #else
+    //using pin polling
+    setup_io();
+    #endif
+    slaveSignalHasBeenSetup = 1;
 }
 
 t_spi_read_buff spi_read_buff;
@@ -274,9 +286,13 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
             //there are still bytes to read
             trace_msg(2,"Kick transfer for rest of %i bytes\n", spi_read_buff.this_message_len);
             kick_mcu_data_transfer(thissq);
+        }else{
+            //check if the MCU requests data transfer via the pin
+            check_data_transfer_rq();
         }        
     }
     free(rx_buff);
+    
     return ret;
 }
 

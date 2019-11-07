@@ -24,6 +24,7 @@ CFLAGS_klipper.elf := $(CFLAGS_klipper.elf) $(if $(filter 4.8.1, $(shell $(CC) -
 # Build the additional hex output file
 target-y += $(OUT)klipper.elf.hex
 
+
 $(OUT)klipper.elf.hex: $(OUT)klipper.elf
 	@echo "  Creating hex file $@"
 	$(Q)$(OBJCOPY) -j .text -j .data -O ihex $< $@
