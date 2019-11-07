@@ -135,7 +135,7 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime)
             struct pollreactor_timer *timer = &pr->timers[i];
             double t = timer->waketime;
             if (eventtime >= t) {
-                trace_msg(2, "Calling timer cbk %i for %i", timer->callback, i);
+                trace_msg(2, "Calling timer cbk %i for %i\n", timer->callback, i);
                 t = timer->callback(pr->callback_data, eventtime);
                 timer->waketime = t;
             }
@@ -575,6 +575,7 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     }
 }
 
+extern t_spi_read_buff spi_read_buff; //nutiu TODO: do it right and pass a pointer
 
 //Processes a chunk of data received via SPI 
 double
@@ -586,29 +587,40 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
     
     //TODO nutiu look in the buffer for the real payload length
 	//uint8_t datalen = data[0];
-    double eventtime = get_monotonic(); 
-    int iret = spi_read(sq, eventtime);
+    
+    int iret = spi_read(sq);
+    if (iret < 0 ) {
+        trace_msg(0,"spi_read error \n");
+        return PR_NEVER;
+    }
     
     pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NEVER);
     trace_msg(3,"nutiu transfer_mcu_data\n");
     
-    int ret = 1;
-    int copy_len = len;
+    
+    
+    pthread_mutex_lock(&sq->lock);
+    int copy_len = spi_read_buff.len;
     //copy the data to the sq buffer
-    if (len >= sizeof(sq->input_buf) - sq->input_pos){ 
+    char* data = spi_read_buff.data;
+    if (copy_len >= sizeof(sq->input_buf) - sq->input_pos){ 
         //if not enough space in the buffer
         copy_len = sizeof(sq->input_buf) - sq->input_pos; 
+        trace_msg(0,"Buffer too small. Need %i but only %i available \n", spi_read_buff.len, copy_len);
     }
     memcpy(&sq->input_buf[sq->input_pos], data, copy_len);
-    trace_msg(3,"nutiu Copied %i bytes\n", len);
+    trace_msg(3,"nutiu Copied %i bytes\n", copy_len);
     sq->input_pos += copy_len;
+    spi_read_buff.len = 0; //reset the buffer
+    pthread_mutex_unlock(&sq->lock);
     
+    int ret ;
     for (;;) {
         ret = check_message(&sq->need_sync, sq->input_buf, sq->input_pos);
         if (!ret){
             // Need more data
             trace_msg(3,"nutiu Need more data \n");
-            return eventtime;
+            return get_monotonic();
         }
         if (ret > 0) {
             // Received a valid message
@@ -629,7 +641,8 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
         if (sq->input_pos)
             memmove(sq->input_buf, &sq->input_buf[ret], sq->input_pos);
     }
-    return eventtime;
+    
+    return PR_NEVER;
 }
 
 // Callback for input activity on the serial fd
@@ -926,7 +939,7 @@ serialqueue_alloc(int serial_fd, int write_only)
     pollreactor_add_fd(&sq->pr, SQPF_PIPE, sq->pipe_fds[0], kick_event);
     pollreactor_add_timer(&sq->pr, SQPT_RETRANSMIT, retransmit_event);
     pollreactor_add_timer(&sq->pr, SQPT_COMMAND, command_event);
-    pollreactor_add_timer(&sq->pr, SQPT_READ_SPI, spi_read);
+    pollreactor_add_timer(&sq->pr, SQPT_READ_SPI, transfer_mcu_data);
     
     set_non_blocking(serial_fd);
     set_non_blocking(sq->pipe_fds[0]);

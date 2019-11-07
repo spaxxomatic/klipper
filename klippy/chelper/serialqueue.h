@@ -49,7 +49,7 @@ struct pull_queue_message {
 struct serialqueue;
 
 double
-transfer_mcu_data(struct serialqueue *sq, char* data, int len);
+transfer_mcu_data(struct serialqueue *sq, double eventtime);
 
 void kick_mcu_data_transfer(struct serialqueue *sq);
 

@@ -135,28 +135,37 @@ ISR (SPI_STC_vect)
   } else SPDR = 0;
 }
 */
-#define MSG_ENDMARK  0xFF
 
 static uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
+//uint_fast8_t data = SPDR;
+uint_fast8_t packet_len = 0;
 ISR (SPI_STC_vect)
 {  
   //gpio_out_write(tx_req_pin, 0); //if we asked for data pick, this was it
     
-    if (SPDR != MSG_ENDMARK) serial_rx_byte( SPDR);
+    if (packet_len){
+        if (packet_len == MESSAGE_SYNC){ 
+            //well, this byte is not the packet len but he previous SYN. 
+            //Packet len is this one
+            packet_len = SPDR;
+        }
+         serial_rx_byte( SPDR);
+         packet_len--;
+    }else{
+        if (SPDR != MESSAGE_ESCAPE){            
+            //must be a packet start or a sync
+            //if (SPDR != MESSAGE_SYNC){
+            packet_len = SPDR;
+            serial_rx_byte( SPDR);
+        }
+    }
     
     int ret = serial_get_tx_byte(&SPDR);
     if (ret < 0){
-            SPDR = MSG_ENDMARK;
-            PORTB &= ~(1<<PB1) | (1<<PB0) ;
+            SPDR = MESSAGE_ESCAPE;
+            //PORTB &= ~(1<<PB1)  ;
+            gpio_out_write(tx_req_pin, 0);  //signal master to send us a status request and pick up the data
     }
-    /*
-        //uint_fast8_t data = SPDR;
-  
-        if (SPDR == MESSAGE_SYNC) {
-            bTransmitting = 1; //we start transmitting after a sync
-            SPDR = get_tx_buff_len(); //the transmitter knows that the next byte is the buff len
-        }
-    */
  }
 
 
@@ -195,5 +204,5 @@ serial_enable_tx_irq(void)
 inline void
 raise_master_data_transfer_irq(void) //signal raspi to pick up data
 {
-    gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
+    //gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
 }

@@ -14,8 +14,14 @@ void close_spi() ;
 
 //int spi_read();
 
-double
-spi_read(struct serialqueue *sq, double eventtime);
+
+typedef struct  __spi_read_buff{
+	int len;
+    uint8_t this_message_len;
+	char data[4096];
+} t_spi_read_buff;
+
+int spi_read(struct serialqueue *sq);
 
 int spi_write(struct serialqueue *sq, char* tx_buff,
                      int len, int is_retransmit);
