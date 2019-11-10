@@ -97,8 +97,9 @@ console_task(void)
     }
 }
 DECL_TASK(console_task);
-
+ 
 // Encode and transmit a "response" message
+extern uint_fast8_t bTransmitting = 0; //flag will be set when the SPI is in the middle of a packet transmission
 void
 console_sendf(const struct command_encoder *ce, va_list args)
 {
@@ -115,6 +116,7 @@ console_sendf(const struct command_encoder *ce, va_list args)
             // Not enough space for message
             return;
         // Disable TX irq and move buffer
+        
         writeb(&transmit_max, 0);
         tpos = readb(&transmit_pos);
         tmax -= tpos;

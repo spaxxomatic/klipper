@@ -24,7 +24,8 @@ void trace_msg(uint8_t level, const char* fmt, ...){
 
 void pabort(const char *s)
 {
-	perror("FATAL: ");
-    perror(s);
+	printf(stderr, "FATAL: ");
+    printf(stderr, s);
+    printf(stderr, "\n");
 	abort();
 }

@@ -98,7 +98,7 @@ void setup_io()
 
 } // setup_io
 
-__uint8_t getPinStatus(int g)
+inline __uint8_t getPinStatus(int g)
 {
   return GET_GPIO(g); // !=0 <-> bit is 1 <- port is HIGH=3.3V
 }

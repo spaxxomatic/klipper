@@ -136,7 +136,7 @@ ISR (SPI_STC_vect)
 }
 */
 
-static uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
+uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
 uint_fast8_t packet_len = 0;
 ISR (SPI_STC_vect)
 {  
@@ -151,7 +151,7 @@ ISR (SPI_STC_vect)
          packet_len--;
     }else{
         //it must be the begining of the next message
-        if (SPDR != MESSAGE_ESCAPE){            
+        if (SPDR != MESSAGE_ESCAPE){
             //must be a packet start or a sync
             //if (SPDR != MESSAGE_SYNC){
             packet_len = SPDR;
@@ -161,13 +161,13 @@ ISR (SPI_STC_vect)
     // ------- send data ---------
     int ret = serial_get_tx_byte(&SPDR);
     if (ret < 0){
+            gpio_out_write(tx_req_pin, 0);  //tell master the buffer is empty
             SPDR = MESSAGE_ESCAPE;
-            gpio_out_write(tx_req_pin, 0);  //signal master to send us a status request and pick up the data
     }
  }
 
 inline void
 raise_master_data_transfer_irq(void) //signal raspi to pick up data
 {
-    //gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
+    gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
 }

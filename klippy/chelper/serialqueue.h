@@ -51,6 +51,9 @@ struct serialqueue;
 double
 transfer_mcu_data(struct serialqueue *sq, double eventtime);
 
+void
+process_read_buffer(struct serialqueue *sq, double eventtime);
+
 void kick_mcu_data_transfer(struct serialqueue *sq);
 
 struct serialqueue *serialqueue_alloc(int serial_fd, int write_only);
