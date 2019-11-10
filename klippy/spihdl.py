@@ -43,6 +43,9 @@ class SerialReader:
             params['#sent_time'] = response.sent_time
             params['#receive_time'] = response.receive_time
             hdl = (params['#name'], params.get('oid'))
+            #print "----- %f %f %s %s"%(response.sent_time, response.receive_time, params['#name'], params.get('oid')) 
+            #for p in params:
+            #    print "%s %s"%(p, params[p])
             try:
                 with self.lock:
                     hdl = self.handlers.get(hdl, self.handle_default)
@@ -55,6 +58,9 @@ class SerialReader:
         while 1:
             msg = "identify offset=%d count=%d" % (len(identify_data), 40)
             params = self.send_with_response(msg, 'identify_response')
+            print "--------------_get_identify_data: " + msg
+            print "Offset %i"%params['offset']
+            print "Len data %i"%len(identify_data)
             if params['offset'] == len(identify_data):
                 msgdata = params['data']
                 if not msgdata:
@@ -89,7 +95,7 @@ class SerialReader:
             self.background_thread.start()
             # Obtain and load the data dictionary from the firmware
             try:
-                identify_data = self._get_identify_data(connect_time + 5.)
+                identify_data = self._get_identify_data(connect_time + 8.)
             except error as e:
                 logging.exception("Timeout on serial connect")
                 self.disconnect()

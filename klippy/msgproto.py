@@ -274,7 +274,9 @@ class MessageParser:
         params, pos = mid.parse(s, MESSAGE_HEADER_SIZE)
         if pos != len(s)-MESSAGE_TRAILER_SIZE:
             raise error("Extra data at end of message")
+        #nutiu
         params['#name'] = mid.name
+        print "      XXPARSE: " + mid.name
         return params
     def encode(self, seq, cmd):
         msglen = MESSAGE_MIN + len(cmd)
@@ -356,6 +358,7 @@ class MessageParser:
     def _init_messages(self, messages, output_ids=[]):
         for msgformat, msgid in messages.items():
             msgid = int(msgid)
+            print "%s %s"%(msgformat, msgid)
             if msgid in output_ids:
                 self.messages_by_id[msgid] = OutputFormat(msgid, msgformat)
                 continue

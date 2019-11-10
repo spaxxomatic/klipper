@@ -108,35 +108,7 @@ DECL_INIT(spi_init);
 {
     serial_rx_byte(UDRx);
 }*/
-/*
-ISR (SPI_STC_vect)
-{  
-  static uint8_t bSendPayload = 0;
-  serial_rx_byte( SPDR);  // grab byte from SPI Data Register
-  //since the SPI is bidirectional, we can send back some data
-  //we tell the master how much data we have to send
-  
-  //When MESSAGE_SYNC comes, we transmit the buffer 
-  //In order to sync the MCU TX buffer with the master RX buff, we send the legth of the transmit buff
-  //The master will take care to pick all bytes from the RX buff
-  if (data == MESSAGE_SYNC){
-    if (transmit_pos >= transmit_max){
-        //nothing to transmit
-        SPDR = 0;
-        bSendPayload = 0;
-    }else{
-        if (likely(bSendPayload)){
-            SPDR = transmit_buf[transmit_pos++];
-        }else{
-            SPDR = transmit_max - transmit_pos; //send the no of bytes in the tx buff
-            bSendPayload = 1;
-        }
-    }
-  } else SPDR = 0;
-}
-*/
-
-uint_fast8_t bTransmitting = 0; //flag to keep the mode - since this is an SPI slave, it cannot send if not asked
+uint_fast8_t bTransmitting = 0; //flag will be set when the SPI is in the middle of a packet transmission
 uint_fast8_t packet_len = 0;
 ISR (SPI_STC_vect)
 {  
@@ -161,8 +133,11 @@ ISR (SPI_STC_vect)
     // ------- send data ---------
     int ret = serial_get_tx_byte(&SPDR);
     if (ret < 0){
+            bTransmitting = 0;
             gpio_out_write(tx_req_pin, 0);  //tell master the buffer is empty
             SPDR = MESSAGE_ESCAPE;
+    }else{
+            bTransmitting = 1;
     }
  }
 

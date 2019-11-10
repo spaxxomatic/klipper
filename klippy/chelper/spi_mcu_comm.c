@@ -230,26 +230,27 @@ int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes s
 	xfer[0].len = transmission_len;
     xfer[0].tx_buf = (unsigned long)buff;
     int ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), xfer);
-	trace_msg(0,"Will read %i + 1  ", expected_bytes);
+	trace_msg(0,"Will read %i + 1  ", expected_bytes);    
 	if (ret < 1) {
         pabort("can't read spi message");
     }else{
+        ret = 0;
+        trace_buffer("Transfer", buff, transmission_len);
         int i = 0;
         for ( i = 0; i < expected_bytes; i++) {
             spi_read_buff.data[spi_read_buff.len++] = buff[i]; //todo - replace with memcpy
         }
-        trace_buffer("RX:", buff, transmission_len);
         if (buff[expected_bytes-1] != MESSAGE_SYNC){
             trace_msg(2," !!Internal err!! Message end is not SYN but %.2X \r\n", buff[expected_bytes-1]);
         }
         char last_byte = buff[expected_bytes];
         trace_msg(2,"And the last is %.2X \r\n", last_byte);        
-        if ( last_byte != MESSAGE_ESCAPE){ //kick one more read, a new message awaits on the MCU side
+        if ( last_byte != MESSAGE_ESCAPE){ //there must be another mesage awaiting on the MCU side
             spi_read_buff.data[spi_read_buff.len++] = last_byte;
-            return last_byte-1; //the rest of the packet
+            ret = last_byte-1; //the rest of the packet
         }
     }
-    return 0;
+    return ret;
 }
 
 #define MAX_CONSECUTIVE_TRANSFER 10 //if more than that, something is bad
@@ -275,7 +276,6 @@ int spi_read() {
 	int ret = 0;
     // If the MCU data tranfer pin is still high, we have data to read
     if (getPinStatus(SPI_SLAVE_IRQ_GPIO_PIN) == 0) {
-        //trace_msg(3,"rx-0 ");
         return spi_read_buff.len ;
     }
     trace_msg(3,"rx-1 ! ");    

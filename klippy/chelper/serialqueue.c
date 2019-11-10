@@ -230,35 +230,45 @@ crc16_ccitt(uint8_t *buf, uint8_t len)
 static int
 check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
 {
-    //trace_msg(3,"nutiu cm buff len %i ns %i\n", buf_len, *need_sync);
+    trace_msg(3,"nutiu cm buff len %i ns %i\n", buf_len, *need_sync);
     if (buf_len < MESSAGE_MIN){
         // Need more data
-        trace_msg(3,"nutiu need md\n");
+        trace_msg(3,"CM: len < 5\n");
         return 0;
     }
-    if (*need_sync)
+    if (*need_sync){
+        trace_msg(3,"CM: err need sync\n");
         goto error;
+    }
     uint8_t msglen = buf[MESSAGE_POS_LEN];
-    if (msglen < MESSAGE_MIN || msglen > MESSAGE_MAX)
+    if (msglen < MESSAGE_MIN || msglen > MESSAGE_MAX){
+        trace_msg(3,"CM: err msglen %i\n", msglen);
         goto error;
+    }    
     uint8_t msgseq = buf[MESSAGE_POS_SEQ];
-    if ((msgseq & ~MESSAGE_SEQ_MASK) != MESSAGE_DEST)
+    if ((msgseq & ~MESSAGE_SEQ_MASK) != MESSAGE_DEST){
+        trace_msg(3,"CM: err MESSAGE_SEQ_MASK \n");
         goto error;
+    }
+        
     if (buf_len < msglen){
         // Need more data
-        trace_msg(3,"nutiu need md 2\n");
+        trace_msg(3,"CM: err need md bufflen < msglen\n");
         return 0;
     }
-    if (buf[msglen-MESSAGE_TRAILER_SYNC] != MESSAGE_SYNC)
+    if (buf[msglen-MESSAGE_TRAILER_SYNC] != MESSAGE_SYNC){
+        trace_msg(3,"CM: err need MESSAGE_SYNC\n");
         goto error;
+    }
+        
     uint16_t msgcrc = ((buf[msglen-MESSAGE_TRAILER_CRC] << 8)
                        | (uint8_t)buf[msglen-MESSAGE_TRAILER_CRC+1]);
     uint16_t crc = crc16_ccitt(buf, msglen-MESSAGE_TRAILER_SIZE);
     if (crc != msgcrc){
-        trace_msg(3,"nutiu Crc err\n");
+        trace_msg(3,"CM: Crc err\n");
         goto error;
     }
-    //trace_msg(3,"nutiu cm ret msglen %i\n", msglen);
+    trace_msg(3,"CM: ret msglen %i\n", msglen);
     return msglen;
 error:
     // Discard bytes until next SYNC found
@@ -534,7 +544,7 @@ static void
 handle_message(struct serialqueue *sq, double eventtime, int len)
 {
     // Calculate receive sequence number
-    trace_msg(3, "handle msg\n");
+    trace_buffer("HM:", sq->input_buf, len);
     uint64_t rseq = ((sq->receive_seq & ~MESSAGE_SEQ_MASK)
                      | (sq->input_buf[MESSAGE_POS_SEQ] & MESSAGE_SEQ_MASK));
     if (rseq < sq->receive_seq)
@@ -574,8 +584,7 @@ double
 transfer_mcu_data(struct serialqueue *sq, double eventtime)
 {
     //pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NEVER);
-    pid_t thread_id = syscall(__NR_gettid);
-    
+    //pid_t thread_id = syscall(__NR_gettid);
     //trace_msg(3,"transfer_mcu_data tid: %i", thread_id);
     if (spi_read()<=0) { ;//read and process data if available
         //transfer_mcu_data();
@@ -588,8 +597,7 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
         return PR_NEVER;
     }
     //pthread_mutex_trylock(&sq->lock);
-    pthread_mutex_lock(&sq->lock);
-    trace_msg(3,"transfer_mcu_data tlock tid %i\n", thread_id);
+    pthread_mutex_lock(&sq->lock);    
     //copy the data to the sq buffer
     char* data = spi_read_buff.data;
     if (copy_len >= sizeof(sq->input_buf) - sq->input_pos){ 
@@ -614,13 +622,12 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
         }
         if (ret > 0) {
             // Received a valid message
-            trace_msg(3,"nutiu Valid msg \n");
-            trace_msg(3,"transfer_mcu_data lock tid %i\n", thread_id);
+            trace_msg(3,"transfer_mcu_data: Valid msg \n");
+            
             pthread_mutex_lock(&sq->lock);
             handle_message(sq, eventtime, ret);
             sq->bytes_read += ret;
             pthread_mutex_unlock(&sq->lock);
-            trace_msg(3,"transfer_mcu_data unlock tid %i\n", thread_id);
         } else {
             // Skip bad data at beginning of input
             trace_msg(3,"Invalid data %i bytes\n", ret);
@@ -695,7 +702,7 @@ retransmit_event(struct serialqueue *sq, double eventtime)
     //int ret = tcflush(sq->serial_fd, TCOFLUSH);
     //if (ret < 0)
     //    report_errno("tcflush", ret);
-    trace_msg(3, "retransmit_event\n");
+    //trace_msg(3, "retransmit_event\n");
     pthread_mutex_lock(&sq->lock);
 
     // Retransmit all pending messages
@@ -1059,7 +1066,7 @@ serialqueue_send_batch(struct serialqueue *sq, struct command_queue *cq
 
     // Add list to cq->stalled_queue
     pid_t thread_id = syscall(__NR_gettid);
-    trace_msg(3, "serialqueue_send_batch tid: %i \n", thread_id);
+    //trace_msg(3, "serialqueue_send_batch tid: %i \n", thread_id);
     pthread_mutex_lock(&sq->lock);
     if (list_empty(&cq->ready_queue) && list_empty(&cq->stalled_queue))
         list_add_tail(&cq->node, &sq->pending_queues);
@@ -1116,16 +1123,14 @@ void __visible
 serialqueue_pull(struct serialqueue *sq, struct pull_queue_message *pqm)
 {
 
-    trace_msg(3, "serialqueue_pull\n");
+    //trace_msg(3, "serialqueue_pull\n");
     pthread_mutex_lock(&sq->lock);
-    trace_msg(3, "t locked\n");
     // Wait for message to be available
     while (list_empty(&sq->receive_queue)) {
         if (pollreactor_is_exit(&sq->pr))
             goto exit;
         sq->receive_waiting = 1;
         int ret = pthread_cond_wait(&sq->cond, &sq->lock);
-        trace_msg(3, "after wait\n");
         if (ret)
             report_errno("pthread_cond_wait", ret);
     }
@@ -1143,7 +1148,6 @@ serialqueue_pull(struct serialqueue *sq, struct pull_queue_message *pqm)
     debug_queue_add(&sq->old_receive, qm);
 
     pthread_mutex_unlock(&sq->lock);
-    trace_msg(3, "t unlocked\n");
     return;
 
 exit:

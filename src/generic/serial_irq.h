@@ -6,9 +6,9 @@
 // callback provided by board specific code
 void raise_master_data_transfer_irq(void);
 
+
 // serial_irq.c
 void serial_rx_byte(uint_fast8_t data);
 int serial_get_tx_byte(uint8_t *pdata);
-uint8_t get_tx_buff_len();
 
 #endif // serial_irq.h

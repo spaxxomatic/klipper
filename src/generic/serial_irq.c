@@ -7,6 +7,7 @@
 #include <string.h> // memmove
 #include "autoconf.h" // CONFIG_SERIAL_BAUD
 #include "board/io.h" // readb
+#include "board/gpio.h" // gpio_out_write
 #include "board/irq.h" // irq_save
 #include "board/misc.h" // console_sendf
 #include "board/pgm.h" // READP
@@ -47,14 +48,6 @@ serial_get_tx_byte(uint8_t *pdata)
     return transmit_max - transmit_pos;
 }
 
-inline uint8_t
-get_tx_buff_len()
-{
-    if (transmit_pos >= transmit_max){
-        return 0;
-    }else 
-        return transmit_max - transmit_pos;
-}
 
 // Remove from the receive buffer the given number of bytes
 static void
@@ -99,10 +92,17 @@ console_task(void)
 DECL_TASK(console_task);
  
 // Encode and transmit a "response" message
-extern uint_fast8_t bTransmitting = 0; //flag will be set when the SPI is in the middle of a packet transmission
+extern uint_fast8_t bTransmitting ; //flag will be set when the SPI is in the middle of a packet transmission
 void
 console_sendf(const struct command_encoder *ce, va_list args)
 {
+    //nutiu
+    uint8_t i = 0;
+    while (bTransmitting){ //if SPI is transmitting, don't do anything
+        i++;
+    }
+    //nutiu end
+
     // Verify space for message
     uint_fast8_t tpos = readb(&transmit_pos), tmax = readb(&transmit_max);
     if (tpos >= tmax) {
@@ -116,7 +116,6 @@ console_sendf(const struct command_encoder *ce, va_list args)
             // Not enough space for message
             return;
         // Disable TX irq and move buffer
-        
         writeb(&transmit_max, 0);
         tpos = readb(&transmit_pos);
         tmax -= tpos;
