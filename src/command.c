@@ -24,11 +24,9 @@ static uint8_t next_sequence = MESSAGE_DEST;
 
 //nutiu TODO: use this escape func
 static uint8_t* escape_and_append(uint8_t* buff, uint8_t val){
-    if (val == MESSAGE_ESCAPE){
-        *buff++ = val;
-        *buff++ = 0x0;
-    }else{
     *buff++ = val;
+    if (val == MESSAGE_ESCAPE){
+        *buff++ = 0x0;
     }
     return buff;
 }

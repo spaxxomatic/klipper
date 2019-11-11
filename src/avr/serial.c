@@ -113,9 +113,10 @@ uint_fast8_t packet_len = 0;
 ISR (SPI_STC_vect)
 {  
     // ------- receive data ---------
-    if (packet_len){
+    if unlikely(packet_len>0){
         if (packet_len == MESSAGE_SYNC){ 
-            //well, this byte is not really the packet len but he previous SYN. 
+            //well, the previous byte is not really the packet len but it was a SYN. 
+            //Sometimes the master will just send a sync alone 
             //Packet len is coming now as it follows the sync byte
             packet_len = SPDR;
         }
@@ -123,13 +124,16 @@ ISR (SPI_STC_vect)
          packet_len--;
     }else{
         //it must be the begining of the next message
-        if (SPDR != MESSAGE_ESCAPE){
-            //must be a packet start or a sync
+        //or some null bytes that are sent when the master reads the buffer 
+        if unlikely(SPDR != NULL_BYTE_MASTER){
+            //what now comes must be a packet start or a sync
             //if (SPDR != MESSAGE_SYNC){
             packet_len = SPDR;
             serial_rx_byte( SPDR);
+        }else{
+            // ------- send data ---------
+            SPDR = serial_get_tx_byte_escaped();
         }
     }
-    // ------- send data ---------
-    SPDR = serial_get_tx_byte_escaped();
+
  }

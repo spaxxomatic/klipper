@@ -23,6 +23,7 @@ MESSAGE_SEQ_MASK = 0x0f
 MESSAGE_DEST = 0x10
 MESSAGE_SYNC = '\x7E'
 MESSAGE_ESCAPE = '\xFF'
+NULL_BYTE_MASTER = '\xFD'
 
 class error(Exception):
     pass
