@@ -48,6 +48,31 @@ serial_get_tx_byte(uint8_t *pdata)
     return transmit_max - transmit_pos;
 }
 
+uint_fast8_t buffer_busy = 0; //flag will be set when the buffer is being written
+
+char
+serial_get_tx_byte_escaped(void)
+{
+    if (! buffer_busy){
+        if (transmit_pos >= transmit_max){
+            gpio_out_write(tx_req_pin, 0);  //no more data
+            return MESSAGE_ESCAPE;
+        }else{
+            //while transmitting, we must escape all MESSAGE_ESCAPE with MESSAGE_ESCAPE + 0x00 
+            //and at the end append two MESSAGE_ESCAPE
+            return transmit_buf[transmit_pos++];
+        }
+    }else{
+        return  MESSAGE_ESCAPE;
+    }
+}
+
+
+inline void
+raise_master_data_transfer_irq(void) //signal raspi to pick up data
+{
+    gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
+}
 
 // Remove from the receive buffer the given number of bytes
 static void
@@ -92,17 +117,9 @@ console_task(void)
 DECL_TASK(console_task);
  
 // Encode and transmit a "response" message
-extern uint_fast8_t bTransmitting ; //flag will be set when the SPI is in the middle of a packet transmission
 void
 console_sendf(const struct command_encoder *ce, va_list args)
 {
-    //nutiu
-    uint8_t i = 0;
-    while (bTransmitting){ //if SPI is transmitting, don't do anything
-        i++;
-    }
-    //nutiu end
-
     // Verify space for message
     uint_fast8_t tpos = readb(&transmit_pos), tmax = readb(&transmit_max);
     if (tpos >= tmax) {
@@ -116,13 +133,14 @@ console_sendf(const struct command_encoder *ce, va_list args)
             // Not enough space for message
             return;
         // Disable TX irq and move buffer
+        buffer_busy = 1;
         writeb(&transmit_max, 0);
         tpos = readb(&transmit_pos);
         tmax -= tpos;
         memmove(&transmit_buf[0], &transmit_buf[tpos], tmax);
         writeb(&transmit_pos, 0);
         writeb(&transmit_max, tmax);
-        
+        buffer_busy = 0;
         //nutiu
         raise_master_data_transfer_irq();
     }

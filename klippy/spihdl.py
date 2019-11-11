@@ -57,8 +57,8 @@ class SerialReader:
         identify_data = ""
         while 1:
             msg = "identify offset=%d count=%d" % (len(identify_data), 40)
-            params = self.send_with_response(msg, 'identify_response')
             print "--------------_get_identify_data: " + msg
+            params = self.send_with_response(msg, 'identify_response')
             print "Offset %i"%params['offset']
             print "Len data %i"%len(identify_data)
             if params['offset'] == len(identify_data):

@@ -21,6 +21,18 @@ static uint8_t next_sequence = MESSAGE_DEST;
  ****************************************************************/
 
 // Encode an integer as a variable length quantity (vlq)
+
+//nutiu TODO: use this escape func
+static uint8_t* escape_and_append(uint8_t* buff, uint8_t val){
+    if (val == MESSAGE_ESCAPE){
+        *buff++ = val;
+        *buff++ = 0x0;
+    }else{
+    *buff++ = val;
+    }
+    return buff;
+}
+
 static uint8_t *
 encode_int(uint8_t *p, uint32_t v)
 {
@@ -29,11 +41,11 @@ encode_int(uint8_t *p, uint32_t v)
     if (sv < (3L<<12) && sv >= -(1L<<12)) goto f3;
     if (sv < (3L<<19) && sv >= -(1L<<19)) goto f2;
     if (sv < (3L<<26) && sv >= -(1L<<26)) goto f1;
-    *p++ = (v>>28) | 0x80;
-f1: *p++ = ((v>>21) & 0x7f) | 0x80;
-f2: *p++ = ((v>>14) & 0x7f) | 0x80;
-f3: *p++ = ((v>>7) & 0x7f) | 0x80;
-f4: *p++ = v & 0x7f;
+    p = escape_and_append(p, (v>>28) | 0x80); //*p++ = (v>>28) | 0x80;
+f1: p = escape_and_append(p, ((v>>21) & 0x7f) | 0x80); //*p++ = ((v>>21) & 0x7f) | 0x80;
+f2: p = escape_and_append(p, ((v>>14) & 0x7f) | 0x80); //*p++ = ((v>>14) & 0x7f) | 0x80;
+f3: p = escape_and_append(p, ((v>>7) & 0x7f) | 0x80); //*p++ = ((v>>7) & 0x7f) | 0x80;
+f4: p = escape_and_append(p, (v & 0x7f)); //*p++ = v & 0x7f;
     return p;
 }
 
@@ -91,7 +103,7 @@ error:
     shutdown("Command parser error");
 }
 
-// Encode a message
+// Encode a message, escaping all MESSAGE_ESCAPE's
 uint_fast8_t
 command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
 {
@@ -100,10 +112,11 @@ command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
         // Ack/Nak message
         return max_size;
     uint8_t *p = &buf[MESSAGE_HEADER_SIZE];
-    uint8_t *maxend = &p[max_size - MESSAGE_MIN];
+    //uint8_t *maxend = &p[max_size - MESSAGE_MIN];
+    uint8_t *maxend = &p[max_size - MESSAGE_MIN] + max_size - MESSAGE_MIN; //nutiu need more space since we're escaping
     uint_fast8_t num_params = READP(ce->num_params);
     const uint8_t *param_types = READP(ce->param_types);
-    *p++ = READP(ce->msg_id);
+    *p++ = READP(ce->msg_id); //nutiu: no need to escape this one since it cannot be 0xFF
     while (num_params--) {
         if (p > maxend)
             goto error;
@@ -127,8 +140,10 @@ command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
             break;
         case PT_string: {
             uint8_t *s = va_arg(args, uint8_t*), *lenp = p++;
-            while (*s && p<maxend)
+            while (*s && p<maxend){
                 *p++ = *s++;
+                //no need to escape, a string does not contain 0xFF
+            }
             *lenp = p-lenp-1;
             break;
         }
@@ -137,13 +152,22 @@ command_encodef(uint8_t *buf, const struct command_encoder *ce, va_list args)
             v = va_arg(args, int);
             if (v > maxend-p)
                 v = maxend-p;
-            *p++ = v;
+            p = escape_and_append(p, v);//*p++ = v;
             uint8_t *s = va_arg(args, uint8_t*);
-            if (t == PT_progmem_buffer)
-                memcpy_P(p, s, v);
-            else
-                memcpy(p, s, v);
-            p += v;
+            uint8_t ii = 0;
+            if (t == PT_progmem_buffer){
+                //memcpy_P(p, s, v); //need to copy byte by byte since we must escape
+                for (ii = 0; ii<v; ii++){
+                        p = escape_and_append(p, pgm_read_byte(s + ii));//*p++ = pgm_read_byte(s + ii);
+                }
+            }else{
+                //memcpy(p, s, v); //need to copy byte by byte since we must escape
+                for (ii = 0; ii<v; ii++){
+                        p = escape_and_append(p, *s);//*p++ = *s++;
+                        s++;            
+                }
+            }
+            //p += v;
             break;
         }
         default:
@@ -174,7 +198,9 @@ command_encode_and_frame(uint8_t *buf, const struct command_encoder *ce
 {
     uint_fast8_t msglen = command_encodef(buf, ce, args);
     command_add_frame(buf, msglen);
-    return msglen;
+    buf[msglen] = MESSAGE_ESCAPE; //nutiu
+    buf[msglen+1] = MESSAGE_ESCAPE; //nutiu
+    return msglen + 2; //nutiu +2
 }
 
 static uint8_t in_sendf;

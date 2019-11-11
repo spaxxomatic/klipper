@@ -85,7 +85,7 @@ serial_init(void)
 }
 DECL_INIT(serial_init);
 */
-struct gpio_out tx_req_pin;
+
 void
 spi_init(void)
 {
@@ -108,7 +108,7 @@ DECL_INIT(spi_init);
 {
     serial_rx_byte(UDRx);
 }*/
-uint_fast8_t bTransmitting = 0; //flag will be set when the SPI is in the middle of a packet transmission
+
 uint_fast8_t packet_len = 0;
 ISR (SPI_STC_vect)
 {  
@@ -131,18 +131,5 @@ ISR (SPI_STC_vect)
         }
     }
     // ------- send data ---------
-    int ret = serial_get_tx_byte(&SPDR);
-    if (ret < 0){
-            bTransmitting = 0;
-            gpio_out_write(tx_req_pin, 0);  //tell master the buffer is empty
-            SPDR = MESSAGE_ESCAPE;
-    }else{
-            bTransmitting = 1;
-    }
+    SPDR = serial_get_tx_byte_escaped();
  }
-
-inline void
-raise_master_data_transfer_irq(void) //signal raspi to pick up data
-{
-    gpio_out_write(tx_req_pin, 1);  //signal master to send us a status request and pick up the data
-}
