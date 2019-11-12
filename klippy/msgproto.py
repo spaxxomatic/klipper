@@ -274,7 +274,7 @@ class MessageParser:
         mid = self.messages_by_id.get(msgid, self.unknown)
         params, pos = mid.parse(s, MESSAGE_HEADER_SIZE)
         if pos != len(s)-MESSAGE_TRAILER_SIZE:
-            print " ------> MID: %s POS %i LEN %i"%(mid.name, pos, len(s)) #nutiu
+            print " ------> ERR ! MID: %s POS %i LEN %i"%(mid.name, pos, len(s)) #nutiu
             raise error("Extra data at end of message")
         #nutiu
         params['#name'] = mid.name

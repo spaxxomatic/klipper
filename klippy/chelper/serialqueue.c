@@ -230,34 +230,33 @@ crc16_ccitt(uint8_t *buf, uint8_t len)
 static int
 check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
 {
-    trace_msg(3,"nutiu cm buff len %i ns %i\n", buf_len, *need_sync);
+    //trace_msg(3,"nutiu cm buff len %i ns %i\n", buf_len, *need_sync);
     if (buf_len < MESSAGE_MIN){
         // Need more data
-        //trace_msg(3,"CM: len < 5\n");
         return 0;
     }
     if (*need_sync){
-        trace_msg(3,"CM: err need sync\n");
+        trace_msg(0,"CM: err need sync\n");
         goto error;
     }
     uint8_t msglen = buf[MESSAGE_POS_LEN];
     if (msglen < MESSAGE_MIN || msglen > MESSAGE_MAX){
-        trace_msg(3,"CM: err msglen %i\n", msglen);
+        trace_msg(0,"CM: err msglen %i\n", msglen);
         goto error;
     }    
     uint8_t msgseq = buf[MESSAGE_POS_SEQ];
     if ((msgseq & ~MESSAGE_SEQ_MASK) != MESSAGE_DEST){
-        trace_msg(3,"CM: err MESSAGE_SEQ_MASK \n");
+        trace_msg(0,"CM: err MESSAGE_SEQ_MASK \n");
         goto error;
     }
         
     if (buf_len < msglen){
         // Need more data
-        trace_msg(3,"CM: err need md bufflen < msglen\n");
+        trace_msg(0,"CM: err need md bufflen < msglen\n");
         return 0;
     }
     if (buf[msglen-MESSAGE_TRAILER_SYNC] != MESSAGE_SYNC){
-        trace_msg(3,"CM: err need MESSAGE_SYNC\n");
+        trace_msg(0,"CM: err need MESSAGE_SYNC\n");
         goto error;
     }
         
@@ -265,14 +264,14 @@ check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
                        | (uint8_t)buf[msglen-MESSAGE_TRAILER_CRC+1]);
     uint16_t crc = crc16_ccitt(buf, msglen-MESSAGE_TRAILER_SIZE);
     if (crc != msgcrc){
-        trace_msg(3,"CM: Crc err\n");
+        trace_msg(0,"CM: Crc err\n");
         goto error;
     }
-    trace_msg(3,"CM: ret msglen %i\n", msglen);
+    //trace_msg(3,"CM: ret msglen %i\n", msglen);
     return msglen;
 error:
     // Discard bytes until next SYNC found
-    trace_msg(3,"nutiu Look for sync\n");
+    trace_msg(0,"err - ffw to sync\n");
     uint8_t *next_sync = memchr(buf, MESSAGE_SYNC, buf_len);
     if (next_sync) {
         *need_sync = 0;
@@ -328,6 +327,7 @@ message_fill(uint8_t *data, int len)
     return qm;
 }
 
+/*
 // Allocate a queue_message and fill it with the unescaped data
 static struct queue_message *
 message_unescape_and_fill(uint8_t *data, int len)
@@ -338,23 +338,28 @@ message_unescape_and_fill(uint8_t *data, int len)
     int i = 0;
     int escaped = 0;
     uint8_t* dest = qm->msg; 
-    for (i=0; i < len; i++){
+    for (i=0; i < len-3; i++){ //the last three are 2 CRC and one SYN , so -3
         uint8_t c = *(data + i);
         *dest++ = c;
         if (c == MESSAGE_ESCAPE){
-            escaped++;
             if (*(data + i + 1) != 0x0){
-              trace_buffer("Unescape error", data, len);  
+              trace_buffer("Unescape error", (char*) data, len);  
               errorf("Unescape error");  
             }else{
+               escaped++;
                i++; //skip it     
             }
         }
     }
     //memcpy(qm->msg, data, len);
+    //if (escaped > 0){
+    //    trace_msg(3, " Found %i escaped ", escaped);
+    //    trace_buffer("ESC ", (char*) qm->msg, len - escaped);
+    //}    
     qm->len = len - escaped;
     return qm;
 }
+*/
 
 // Allocate a queue_message and fill it with a series of encoded vlq integers
 struct queue_message *
@@ -572,7 +577,7 @@ static void
 handle_message(struct serialqueue *sq, double eventtime, int len)
 {
     // Calculate receive sequence number
-    trace_buffer("HM:", sq->input_buf, len);
+    //trace_buffer("HM", sq->input_buf, len);
     uint64_t rseq = ((sq->receive_seq & ~MESSAGE_SEQ_MASK)
                      | (sq->input_buf[MESSAGE_POS_SEQ] & MESSAGE_SEQ_MASK));
     if (rseq < sq->receive_seq)
@@ -596,7 +601,8 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     if (len > MESSAGE_MIN) {
         // Add message to receive queue
         //trace_msg(3, "add to receive queue\n");
-        struct queue_message *qm = message_unescape_and_fill(sq->input_buf, len);
+        //struct queue_message *qm = message_unescape_and_fill(sq->input_buf, len);
+        struct queue_message *qm = message_fill(sq->input_buf, len);
         qm->sent_time = (rseq > sq->retransmit_seq
                          ? sq->last_receive_sent_time : 0.);
         qm->receive_time = get_monotonic(); // must be time post read()
@@ -625,7 +631,6 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
         trace_msg(3,"ERROR: len is zero after read call\n");
         return PR_NEVER;
     }
-    //pthread_mutex_trylock(&sq->lock);
     pthread_mutex_lock(&sq->lock);    
     //copy the data to the sq buffer
     char* data = spi_read_buff.data;
@@ -636,7 +641,7 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
     }
     memcpy(&sq->input_buf[sq->input_pos], data, copy_len);
     //trace_msg(3,"nutiu Copied %i bytes\n", copy_len);
-    trace_buffer("CP",(char*) &sq->input_buf[sq->input_pos], copy_len);
+    //trace_buffer("CP",(char*) &sq->input_buf[sq->input_pos], copy_len);
     sq->input_pos += copy_len;
     spi_read_buff.len = 0; //reset the buffer
     pthread_mutex_unlock(&sq->lock);
@@ -651,7 +656,7 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
         }
         if (ret > 0) {
             // Received a valid message
-            trace_msg(3,"transfer_mcu_data: Valid msg \n");
+            //trace_msg(3,"transfer_mcu_data: Valid msg \n");
             
             pthread_mutex_lock(&sq->lock);
             handle_message(sq, eventtime, ret);
@@ -659,7 +664,7 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
             pthread_mutex_unlock(&sq->lock);
         } else {
             // Skip bad data at beginning of input
-            trace_msg(3,"Invalid data %i bytes\n", ret);
+            trace_msg(0,"err- Invalid data %i bytes\n", ret);
             ret = -ret;
             pthread_mutex_lock(&sq->lock);
             sq->bytes_invalid += ret;
@@ -722,7 +727,7 @@ retransmit_event(struct serialqueue *sq, double eventtime)
             sq->ignore_nak_seq = sq->retransmit_seq;
     } else {
         // Retransmit due to timeout
-        trace_msg(3, "Retr TO\n");
+        //trace_msg(3, "Retr TO\n");
         sq->rto *= 2.0;
         if (sq->rto > MAX_RTO)
             sq->rto = MAX_RTO;
@@ -783,6 +788,7 @@ build_and_send_command(struct serialqueue *sq, double eventtime)
     out->msg[out->len - MESSAGE_TRAILER_CRC+1] = crc & 0xff;
     out->msg[out->len - MESSAGE_TRAILER_SYNC] = MESSAGE_SYNC;
 
+    trace_buffer("WR", (char*) out->msg, out->len);
     int ret = spi_write(sq, (char*) out->msg, out->len, 0);
     if (ret < 0)
         report_errno("write", ret);
@@ -880,7 +886,7 @@ check_send_command(struct serialqueue *sq, double eventtime)
 static double
 command_event(struct serialqueue *sq, double eventtime)
 {
-    trace_msg(3, "command_event\n");
+    //trace_msg(3, "command_event\n");
     pthread_mutex_lock(&sq->lock);
     double waketime;
     for (;;) {
@@ -899,7 +905,6 @@ background_thread(void *data)
 {
     struct serialqueue *sq = data;
     pollreactor_run(&sq->pr);
-    trace_msg(3, "background_thread\n");
     pthread_mutex_lock(&sq->lock);
     check_wake_receive(sq);    
     pthread_mutex_unlock(&sq->lock);
@@ -1055,7 +1060,7 @@ serialqueue_send_batch(struct serialqueue *sq, struct command_queue *cq
     qm = list_first_entry(msgs, struct queue_message, node);
 
     // Add list to cq->stalled_queue
-    pid_t thread_id = syscall(__NR_gettid);
+    //pid_t thread_id = syscall(__NR_gettid);
     //trace_msg(3, "serialqueue_send_batch tid: %i \n", thread_id);
     pthread_mutex_lock(&sq->lock);
     if (list_empty(&cq->ready_queue) && list_empty(&cq->stalled_queue))

@@ -120,7 +120,8 @@ ISR (SPI_STC_vect)
         return;
     }
     if (SPDR == NULL_BYTE_MASTER){
-        int ret = serial_get_tx_byte(&SPDR);
+        SPDR = serial_get_tx_byte_escaped();
+        /*int ret = serial_get_tx_byte(&SPDR);
         //SPDR = serial_get_tx_byte_escaped();
         if (ret < 0)
             SPDR = MESSAGE_ESCAPE;
@@ -128,7 +129,7 @@ ISR (SPI_STC_vect)
         {
             //SPDR = 0x77;
         }
-        
+        */
         return;
     }
     if (SPDR == MESSAGE_SYNC){

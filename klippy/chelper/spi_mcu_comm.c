@@ -202,7 +202,7 @@ int setup_spi_comm(char* spi_device, uint32_t speed){
 }
 
 //transfers a number of bytes from slave
-/*int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
+int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
     //We read one more byte than requested, to check if another message follows 
     //or it's a MESSAGE_ESCAPE, which signals an empty buffer
     int transmission_len = expected_bytes+3; 
@@ -236,8 +236,8 @@ int setup_spi_comm(char* spi_device, uint32_t speed){
     }
     free(buff);
     return ret;
-}*/
-
+}
+/*
 int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
     //We read one more byte than requested, to check if another message follows 
     //or it's a MESSAGE_ESCAPE, which signals an empty buffer
@@ -277,7 +277,7 @@ int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes s
     free(buff);
     return ret;
 }
-
+*/
 int read_all_mcu_data(int expected_bytes){
     int cycle= 0;         
     while (cycle++ < MAX_CONSECUTIVE_TRANSFER){
@@ -362,8 +362,8 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
         trace_msg(0,"can't send spi message\n");
         ret = -1;
     }else{
-        trace_buffer("TX", inp_buff, buff_len);
-        trace_buffer("RX", rx_buff, buff_len);
+        //trace_buffer("TX", inp_buff, buff_len);
+        //trace_buffer("RX", rx_buff, buff_len);
         //There should be not any payload data while we're sendinf. We must receive back the data we've sent, by the nature of SPI 
         int i ;
         for (i=1; i < buff_len; i++){
