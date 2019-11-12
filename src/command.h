@@ -56,7 +56,7 @@
 #define MESSAGE_DEST 0x10
 #define MESSAGE_SYNC 0x7E
 #define MESSAGE_ESCAPE  0xFF
-#define NULL_BYTE_MASTER 0XFC
+#define NULL_BYTE_MASTER 0XFD
 
 struct command_encoder {
     uint8_t msg_id, max_size, num_params;

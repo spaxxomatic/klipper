@@ -344,6 +344,7 @@ message_unescape_and_fill(uint8_t *data, int len)
         if (c == MESSAGE_ESCAPE){
             escaped++;
             if (*(data + i + 1) != 0x0){
+              trace_buffer("Unescape error", data, len);  
               errorf("Unescape error");  
             }else{
                i++; //skip it     

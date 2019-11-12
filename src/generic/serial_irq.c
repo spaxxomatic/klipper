@@ -18,7 +18,7 @@
 #define RX_BUFFER_SIZE 192
 
 static uint8_t receive_buf[RX_BUFFER_SIZE], receive_pos;
-static uint8_t transmit_buf[128], transmit_pos, transmit_max;
+static uint8_t transmit_buf[96], transmit_pos, transmit_max;
 
 DECL_CONSTANT("SERIAL_BAUD", CONFIG_SERIAL_BAUD);
 DECL_CONSTANT("RECEIVE_WINDOW", RX_BUFFER_SIZE);
@@ -42,6 +42,7 @@ int
 serial_get_tx_byte(uint8_t *pdata)
 {
     if (transmit_pos >= transmit_max){
+        gpio_out_write(tx_req_pin, 0);  //no more data
         return -1;
     }
     *pdata = transmit_buf[transmit_pos++];
@@ -49,6 +50,7 @@ serial_get_tx_byte(uint8_t *pdata)
 }
 
 uint_fast8_t buffer_busy = 0; //flag will be set when the buffer is being written
+uint8_t escape_next = 0; //flag will be set when the buffer is being written
 
 char
 serial_get_tx_byte_escaped(void)
@@ -58,6 +60,11 @@ serial_get_tx_byte_escaped(void)
         return  MESSAGE_ESCAPE;
     }
     if (unlikely(buffer_busy)){ 
+        //we need at least two on the master side to detect them, so set the flag 
+        //so that the next transmitted byte is also an ESC
+        escape_next = 1;
+        return  MESSAGE_ESCAPE;
+    }else{
         //since this function is called from the SPI IRQ, when the buffer is moved around by console_senf
         //we might have a race condition. So we will return ESCAPEs.
         //The master will detect and remove all consecutive ESCAPEs.  
@@ -67,11 +74,6 @@ serial_get_tx_byte_escaped(void)
         }else{
             return transmit_buf[transmit_pos++];
         }
-    }else{
-        //we need at least two on the master side to detect them, so set the flag 
-        //so that the next transmitted byte is also an ESC
-        escape_next = 1;
-        return  MESSAGE_ESCAPE;
     }
 }
 
@@ -149,7 +151,7 @@ console_sendf(const struct command_encoder *ce, va_list args)
         writeb(&transmit_max, tmax);
         buffer_busy = 0;
         //nutiu
-        //raise_master_data_transfer_irq();
+        raise_master_data_transfer_irq();
     }
 
     // Generate message

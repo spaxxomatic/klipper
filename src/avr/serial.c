@@ -73,7 +73,7 @@ DECL_CONSTANT_STR("RESERVE_PINS_serial", "PJ0,PJ1");
 #define USARTx_UDRE_vect AVR_SERIAL_REG(USART, CONFIG_SERIAL_PORT, _UDRE_vect)
 #endif
 
-/*
+
 void
 serial_init(void)
 {
@@ -82,9 +82,10 @@ serial_init(void)
     UBRRx = DIV_ROUND_CLOSEST(CONFIG_CLOCK_FREQ, cm * CONFIG_SERIAL_BAUD) - 1UL;
     UCSRxC = (1<<UCSZx1) | (1<<UCSZx0);
     UCSRxB = (1<<RXENx) | (1<<TXENx) | (1<<RXCIEx) | (1<<UDRIEx);
+    
 }
 DECL_INIT(serial_init);
-*/
+
 
 void
 spi_init(void)
@@ -110,30 +111,78 @@ DECL_INIT(spi_init);
 }*/
 
 uint_fast8_t packet_len = 0;
+uint_fast8_t dbg = 0;
 ISR (SPI_STC_vect)
 {  
+    if (packet_len >0){  
+        serial_rx_byte( SPDR);
+        packet_len--;
+        return;
+    }
+    if (SPDR == NULL_BYTE_MASTER){
+        int ret = serial_get_tx_byte(&SPDR);
+        //SPDR = serial_get_tx_byte_escaped();
+        if (ret < 0)
+            SPDR = MESSAGE_ESCAPE;
+        else
+        {
+            //SPDR = 0x77;
+        }
+        
+        return;
+    }
+    if (SPDR == MESSAGE_SYNC){
+        serial_rx_byte( SPDR);
+        return;
+    }
+    if (SPDR < MESSAGE_MAX){
+        serial_rx_byte( SPDR);
+        packet_len = SPDR-1;
+    };
+ }
+
+/*ISR (SPI_STC_vect)
+{  
     // ------- receive data ---------
-    if unlikely(packet_len>0){
+    //UDRx = SPDR;
+    dbg = 0;
+    if (packet_len > 0){
+        dbg = packet_len;
         if (packet_len == MESSAGE_SYNC){ 
             //well, the previous byte is not really the packet len but it was a SYN. 
             //Sometimes the master will just send a sync alone 
             //Packet len is coming now as it follows the sync byte
             packet_len = SPDR;
         }
-         serial_rx_byte( SPDR);
-         packet_len--;
+        serial_rx_byte( SPDR);
+        packet_len--;
     }else{
+        dbg = 2;
         //it must be the begining of the next message
         //or some null bytes that are sent when the master reads the buffer 
-        if unlikely(SPDR != NULL_BYTE_MASTER){
-            //what now comes must be a packet start or a sync
-            //if (SPDR != MESSAGE_SYNC){
-            packet_len = SPDR;
-            serial_rx_byte( SPDR);
-        }else{
+        if (SPDR == NULL_BYTE_MASTER){
+            dbg=3;
             // ------- send data ---------
             SPDR = serial_get_tx_byte_escaped();
+            //what now comes must be a packet start or a sync
+            //if (SPDR != MESSAGE_SYNC){
+        }else{
+            packet_len = SPDR;
+            serial_rx_byte( SPDR);
+            dbg = 4;
         }
     }
-
+    SPDR =dbg;
  }
+*/
+ISR(USARTx_UDRE_vect)
+{
+    /*uint8_t data;
+    int ret = serial_get_tx_byte(&data);
+    if (ret)
+        UCSRxB &= ~(1<<UDRIEx);
+    else
+        UDRx = data;
+    */
+     UDRx = 'a';
+}

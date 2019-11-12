@@ -39,7 +39,7 @@ struct serialqueue* thissq = 0;
 void handleSlaveIrq(void) {
     trace_msg(1,"Slave IRQ\n");
     //spi_read();
-    if (thissq){ //in case we're getting an irq before being inistialized
+    if (thissq){ //in case we're getting an irq before being initialized
         //schedule a data transmission        
         kick_mcu_data_transfer(thissq);
     }
@@ -110,10 +110,12 @@ void trace_buffer(char* msg, char* buff, int len){
         }
 		trace_msg(2,"\r\n");
 }
+#define MAX_CONSECUTIVE_TRANSFER 10 //if more than that, something is bad
 
 void cleanup_mcu_buffer(){
-    int i, stop_receiving = 0;
+    int i, k, stop_receiving = 0;
     int buff_len = 64;
+    
     char* rx_buff = malloc(buff_len); //when we write len bytes, we can receive len-1
     while (getPinStatus(SPI_SLAVE_IRQ_GPIO_PIN) > 0){
         if (stop_receiving){
@@ -132,15 +134,18 @@ void cleanup_mcu_buffer(){
             .speed_hz = spi_speed,
             .bits_per_word = SPI_BITS,
         };
-        ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
+        
+	    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr) < 1) {
+            pabort("SPI error");
+        }        
         int j=0;
         trace_buffer("CB", rx_buff, buff_len);
         for (i = 0; i < buff_len; i++){
-            if (rx_buff[i] == NULL_BYTE_MASTER ){
+            if (rx_buff[i] == MESSAGE_ESCAPE ){ 
                 j++;
-            }
+            }else{j=0;}
         }
-        if (j > 32){
+        if (j > 32 || (k++ >= MAX_CONSECUTIVE_TRANSFER) ){
             stop_receiving = 1;
         }
         usleep(10000);
@@ -197,7 +202,7 @@ int setup_spi_comm(char* spi_device, uint32_t speed){
 }
 
 //transfers a number of bytes from slave
-int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
+/*int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
     //We read one more byte than requested, to check if another message follows 
     //or it's a MESSAGE_ESCAPE, which signals an empty buffer
     int transmission_len = expected_bytes+3; 
@@ -231,9 +236,47 @@ int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes s
     }
     free(buff);
     return ret;
-}
+}*/
 
-#define MAX_CONSECUTIVE_TRANSFER 10 //if more than that, something is bad
+int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
+    //We read one more byte than requested, to check if another message follows 
+    //or it's a MESSAGE_ESCAPE, which signals an empty buffer
+    int transmission_len = expected_bytes+2; 
+    
+    char* buff = malloc(transmission_len); 
+    memset(buff, NULL_BYTE_MASTER, transmission_len); //we send only nulls
+    xfer[0].rx_buf = (unsigned long)buff;
+	xfer[0].len = transmission_len;
+    xfer[0].tx_buf = (unsigned long)buff;
+    int ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), xfer);
+	trace_msg(0,"Will read %i + 2  ", expected_bytes);    
+	if (ret < 1) {
+        pabort("can't read spi message");
+    }else{
+        ret = 0;
+        trace_buffer("Transfer", buff, transmission_len);
+        int i = 0;
+        for ( i = 0; i < expected_bytes; i++) {
+            if (buff[i] == MESSAGE_ESCAPE){
+                if (buff[i+1] == MESSAGE_ESCAPE){
+                    //skip
+                    i++;
+                }else{
+                    spi_read_buff.data[spi_read_buff.len++] = buff[i]; //todo - replace with memcpy
+                }; 
+            }else{
+                spi_read_buff.data[spi_read_buff.len++] = buff[i]; //todo - replace with memcpy
+            }
+        }
+        if (buff[expected_bytes-1] != MESSAGE_SYNC){
+            trace_msg(2," !!Internal err!! Message end is not SYN but %.2X \r\n", buff[expected_bytes-1]);
+        }
+        char* last_bytes = &buff[expected_bytes];
+        trace_msg(2,"And last 2 %.2X:%.2X \r\n", *last_bytes, *(last_bytes + 1));
+    }
+    free(buff);
+    return ret;
+}
 
 int read_all_mcu_data(int expected_bytes){
     int cycle= 0;         
@@ -256,6 +299,7 @@ int spi_read() {
 	int ret = 0;
     // If the MCU data tranfer pin is still high, we have data to read
     if (getPinStatus(SPI_SLAVE_IRQ_GPIO_PIN) == 0) {
+        //trace_msg(3,"rx0 ! ");    
         return spi_read_buff.len ;
     }
     trace_msg(3,"rx1 ! ");    
@@ -267,7 +311,7 @@ int spi_read() {
 
     //We have been called by the timer that checks the MCU transfer requests (SQPT_READ_SPI)
     //We have to read two bytes, the first byte must be escape and the second the message length
-    char buff[2] = {NULL_BYTE_MASTER, NULL_BYTE_MASTER}; //need to set this value so that the MCU does not confuse it with a data packet
+    char buff[3] = {NULL_BYTE_MASTER, NULL_BYTE_MASTER, NULL_BYTE_MASTER}; //need to set this value so that the MCU does not confuse it with a data packet
     xfer[0].rx_buf = (unsigned long)&buff;
     xfer[0].len = 2;
     xfer[0].tx_buf = (unsigned long)&buff;
@@ -276,26 +320,16 @@ int spi_read() {
         pabort("can't read spi message");
     
     int expected_bytes = 0;
-    if (buff[0] != MESSAGE_ESCAPE) {
-        //trace_msg(0,"ERR: first byte is %.2X \n",  buff[0]);
-        packet_len = buff[0];    
-        spi_read_buff.data[spi_read_buff.len++] = buff[0];
-        spi_read_buff.data[spi_read_buff.len++] = buff[1];
-        expected_bytes = packet_len - 2;
-    }else if  (buff[1] != MESSAGE_ESCAPE) {
-        packet_len = buff[1];
-        spi_read_buff.data[spi_read_buff.len++] = buff[1];    
-        expected_bytes = packet_len - 1;
-    }else{
-        trace_msg(0,"ERR: No len in the first two bytes \n");
-        return -1;
-    }
-    trace_msg(3, "Asked for len, got %i %i \n", buff[0], buff[1]);
+    packet_len = buff[1];
+    trace_buffer("RXLEN ", buff, 2);
+    
     if (packet_len<MESSAGE_MIN || packet_len>(2*MESSAGE_MAX-2) ){
         trace_msg(0, "Internal error. Len is invalid: %i\n", packet_len); 
         spi_read_buff.this_message_len = 0;//
         return -1;
     }
+    spi_read_buff.data[spi_read_buff.len++] = packet_len;
+    expected_bytes = packet_len - 1;
     //spi_read_buff.data[spi_read_buff.len++] = packet_len;
     read_all_mcu_data(expected_bytes); //+ 2 because we have two MESSAGE_ESCAPE at the end
     return spi_read_buff.len;
@@ -331,12 +365,13 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
         trace_buffer("TX", inp_buff, buff_len);
         trace_buffer("RX", rx_buff, buff_len);
         //There should be not any payload data while we're sendinf. We must receive back the data we've sent, by the nature of SPI 
-        int i = 1;
-        while(i < buff_len){
+        int i ;
+        for (i=1; i < buff_len; i++){
             if (rx_buff[i] != inp_buff[i-1]){
                trace_msg(0," !! MCU ERROR !! payload rcv while transmit \n"); 
             }
         }
+        kick_mcu_data_transfer(thissq);  //make sure the read is not suspended
         /*   
         while(i < buff_len){            
             if (rx_buff[i] != MESSAGE_ESCAPE){ //Whatever we receive besides an escape must be the beginning of a data packet
