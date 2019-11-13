@@ -131,17 +131,11 @@ pollreactor_check_timers(struct pollreactor *pr, double eventtime)
 {
     if (eventtime >= pr->next_timer) {
         pr->next_timer = PR_NEVER;
-        int i;
-        //check_mcu_data_pending();
-       /* if (spi_read()>0) { ;//read and process data if available
-            transfer_mcu_data();
-        }
-        */        
+        int i; 
         for (i=0; i<pr->num_timers; i++) {
             struct pollreactor_timer *timer = &pr->timers[i];
             double t = timer->waketime;
             if (eventtime >= t) {
-                //trace_msg(2, "Calling timer cbk %i for %i\n", timer->callback, i);
                 t = timer->callback(pr->callback_data, eventtime);
                 timer->waketime = t;
             }
@@ -585,7 +579,6 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
 
     if (rseq != sq->receive_seq){
         // New sequence number
-        trace_msg(3, "upd rseq\n");
         update_receive_seq(sq, eventtime, rseq);
     }
     if (len == MESSAGE_MIN) {
@@ -594,13 +587,12 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
             sq->last_ack_seq = rseq;
         else if (rseq > sq->ignore_nak_seq && !list_empty(&sq->sent_queue))
             // Duplicate Ack is a Nak - do fast retransmit
-            trace_msg(3, "nak retry\n");
+            trace_msg(2, "nak retry\n");
             pollreactor_update_timer(&sq->pr, SQPT_RETRANSMIT, PR_NOW);
     }
 
     if (len > MESSAGE_MIN) {
         // Add message to receive queue
-        //trace_msg(3, "add to receive queue\n");
         //struct queue_message *qm = message_unescape_and_fill(sq->input_buf, len);
         struct queue_message *qm = message_fill(sq->input_buf, len);
         qm->sent_time = (rseq > sq->retransmit_seq
@@ -617,18 +609,13 @@ extern t_spi_read_buff spi_read_buff; //nutiu TODO: do it right and pass a point
 double
 transfer_mcu_data(struct serialqueue *sq, double eventtime)
 {
-    //pollreactor_update_timer(&sq->pr, SQPT_READ_SPI, PR_NEVER);
-    //pid_t thread_id = syscall(__NR_gettid);
-    //trace_msg(3,"transfer_mcu_data tid: %i", thread_id);
     
     if (spi_read()<=0) { ;//read and process data if available
-        //transfer_mcu_data();
-        //trace_msg(3,"No data\n");
         return get_monotonic();
     }
     int copy_len = spi_read_buff.len;
     if (copy_len == 0){
-        trace_msg(3,"ERROR: len is zero after read call\n");
+        trace_msg(0,"len is zero after read call\n");
         return PR_NEVER;
     }
     pthread_mutex_lock(&sq->lock);    
@@ -637,34 +624,29 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
     if (copy_len >= sizeof(sq->input_buf) - sq->input_pos){ 
         //if not enough space in the buffer
         copy_len = sizeof(sq->input_buf) - sq->input_pos; 
-        trace_msg(0,"Buffer too small. Need %i but only %i available \n", spi_read_buff.len, copy_len);
+        trace_msg(1,"Buffer too small. Need %i but only %i available \n", spi_read_buff.len, copy_len);
     }
     memcpy(&sq->input_buf[sq->input_pos], data, copy_len);
-    //trace_msg(3,"nutiu Copied %i bytes\n", copy_len);
-    //trace_buffer("CP",(char*) &sq->input_buf[sq->input_pos], copy_len);
     sq->input_pos += copy_len;
     spi_read_buff.len = 0; //reset the buffer
     pthread_mutex_unlock(&sq->lock);
-    //trace_msg(3,"transfer_mcu_data unlock tid %i\n", thread_id);
     int ret ;
     for (;;) {
         ret = check_message(&sq->need_sync, sq->input_buf, sq->input_pos);
         if (!ret){
-            // Need more data
-            //trace_msg(0,"Need more data not happen\n");
+            // Done processing
             return get_monotonic();
         }
         if (ret > 0) {
             // Received a valid message
             //trace_msg(3,"transfer_mcu_data: Valid msg \n");
-            
             pthread_mutex_lock(&sq->lock);
             handle_message(sq, eventtime, ret);
             sq->bytes_read += ret;
             pthread_mutex_unlock(&sq->lock);
         } else {
             // Skip bad data at beginning of input
-            trace_msg(0,"err- Invalid data %i bytes\n", ret);
+            trace_msg(0,"Invalid data %i bytes\n", ret);
             ret = -ret;
             pthread_mutex_lock(&sq->lock);
             sq->bytes_invalid += ret;
@@ -693,11 +675,6 @@ kick_event(struct serialqueue *sq, double eventtime)
 static double
 retransmit_event(struct serialqueue *sq, double eventtime)
 {
-    //nutiu !! what to do with spi? has no tcflush
-    //int ret = tcflush(sq->serial_fd, TCOFLUSH);
-    //if (ret < 0)
-    //    report_errno("tcflush", ret);
-    //trace_msg(3, "retransmit_event\n");
     pthread_mutex_lock(&sq->lock);
 
     // Retransmit all pending messages
@@ -788,7 +765,7 @@ build_and_send_command(struct serialqueue *sq, double eventtime)
     out->msg[out->len - MESSAGE_TRAILER_CRC+1] = crc & 0xff;
     out->msg[out->len - MESSAGE_TRAILER_SYNC] = MESSAGE_SYNC;
 
-    trace_buffer("WR", (char*) out->msg, out->len);
+    //trace_buffer("WR", (char*) out->msg, out->len);
     int ret = spi_write(sq, (char*) out->msg, out->len, 0);
     if (ret < 0)
         report_errno("write", ret);
@@ -1101,7 +1078,6 @@ serialqueue_encode_and_send(struct serialqueue *sq, struct command_queue *cq
                             , uint32_t *data, int len
                             , uint64_t min_clock, uint64_t req_clock)
 {
-    trace_msg(3, "serialqueue_encode_and_send %s", data);
     struct queue_message *qm = message_alloc_and_encode(data, len);
     qm->min_clock = min_clock;
     qm->req_clock = req_clock;
@@ -1117,8 +1093,6 @@ serialqueue_encode_and_send(struct serialqueue *sq, struct command_queue *cq
 void __visible
 serialqueue_pull(struct serialqueue *sq, struct pull_queue_message *pqm)
 {
-
-    //trace_msg(3, "serialqueue_pull\n");
     pthread_mutex_lock(&sq->lock);
     // Wait for message to be available
     while (list_empty(&sq->receive_queue)) {
@@ -1143,7 +1117,6 @@ serialqueue_pull(struct serialqueue *sq, struct pull_queue_message *pqm)
     debug_queue_add(&sq->old_receive, qm);
 
     pthread_mutex_unlock(&sq->lock);
-    trace_msg(3, "        serialqueue_pull "); // nutiu
     return;
 
 exit:

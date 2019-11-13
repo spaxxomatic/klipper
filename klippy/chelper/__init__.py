@@ -12,16 +12,16 @@ import cffi
 ######################################################################
 
 COMPILE_CMD = ("gcc -Wall -g -O2 -shared -fPIC"
-               " -flto -fwhole-program -fno-use-linker-plugin"
+               " -flto -fwhole-program -fno-use-linker-plugin -std=gnu11 -D_GNU_SOURCE "
                " -o %s %s")
 SOURCE_FILES = [
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c',
     'kin_cartesian.c', 'kin_corexy.c', 'kin_delta.c', 'kin_polar.c',
-    'kin_winch.c', 'kin_extruder.c',
+    'kin_winch.c', 'kin_extruder.c', 'spi_mcu_comm.c', 'cssl.c', 'pos_decode.c'
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
-    'list.h', 'serialqueue.h', 'stepcompress.h', 'itersolve.h', 'pyhelper.h'
+    'list.h', 'serialqueue.h', 'stepcompress.h', 'itersolve.h', 'pyhelper.h', 'cssl.h', 'pos_decode.h', 'spi_mcu_comm.h'
 ]
 
 defs_stepcompress = """
@@ -56,6 +56,15 @@ defs_itersolve = """
         , double x, double y, double z);
     void itersolve_set_commanded_pos(struct stepper_kinematics *sk, double pos);
     double itersolve_get_commanded_pos(struct stepper_kinematics *sk);
+"""
+
+defs_pos_decode = """
+    float get_x_pos();
+    float get_y_pos();
+    long get_x_ticks_pos();
+    long get_y_ticks_pos();
+    int init_encoder_comm(char* serial_port, int baudrate);
+    void shutdown_encoder();    
 """
 
 defs_kin_cartesian = """
@@ -130,7 +139,7 @@ defs_all = [
     defs_pyhelper, defs_serialqueue, defs_std,
     defs_stepcompress, defs_itersolve,
     defs_kin_cartesian, defs_kin_corexy, defs_kin_delta, defs_kin_polar,
-    defs_kin_winch, defs_kin_extruder
+    defs_kin_winch, defs_kin_extruder, defs_pos_decode
 ]
 
 # Return the list of file modification times
@@ -167,8 +176,7 @@ def get_ffi():
     global FFI_main, FFI_lib, pyhelper_logging_callback
     if FFI_lib is None:
         srcdir = os.path.dirname(os.path.realpath(__file__))
-        check_build_code(srcdir, DEST_LIB, SOURCE_FILES, COMPILE_CMD
-                         , OTHER_FILES)
+        #check_build_code(srcdir, DEST_LIB, SOURCE_FILES, COMPILE_CMD, OTHER_FILES)
         FFI_main = cffi.FFI()
         for d in defs_all:
             FFI_main.cdef(d)

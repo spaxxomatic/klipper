@@ -12,8 +12,8 @@
 struct serialqueue;
 struct serialqueue * spiqueue_alloc(char* spi_device, int write_only, uint32_t speed);
 void close_spi() ;
-void trace_buffer(char* msg, char* buff, int len);
 void check_mcu_data_pending();
+
 #define MCU_DATA_PENDING getPinStatus(SPI_SLAVE_IRQ_GPIO_PIN) > 0
 
 typedef struct  __spi_read_buff{
