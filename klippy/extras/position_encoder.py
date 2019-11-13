@@ -29,9 +29,10 @@ class PositionFeedback:
         self.lock = threading.Lock()
         self.background_thread = None
     def _bg_thread(self):
+        #self.axis_stat = 
         while 1:
             axis_stat = self.ffi_lib.get_axis_stat()
-            print ("X POS " + str(x_pos))
+            #print ("X POS " + str(x_pos))
             time.sleep(1)
     def connect(self):
         # Initial connection
