@@ -35,10 +35,10 @@ void setSensorResolution(float resolution){
     as5311resolution = resolution;
 }
 
-axis_position_struct get_axis_stat(){
+axis_position_struct  __visible
+get_axis_stat(){
     axis_position_struct ret = {.xerror = X_axis.last_error, .yerror = Y_axis.last_error, .xposition = X_axis.position_mm, .yposition = Y_axis.position_mm};
     return ret;
-    //return X_axis.position_mm;
 }
 
 float  __visible
@@ -60,6 +60,8 @@ long __visible
 get_y_ticks_pos(){
     return Y_axis.abs_position;
 }
+
+
 
 //AS5311 delivers a 12 bit absolute position inside the 2 mm pole spacing
 //in order to detect the movement over the index position, we need to check if the previous absolute value is near index 

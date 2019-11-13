@@ -278,7 +278,7 @@ class MessageParser:
             raise error("Extra data at end of message")
         #nutiu
         params['#name'] = mid.name
-        print "      XXPARSE: " + mid.name
+        #print "      XXPARSE: " + mid.name
         return params
     def encode(self, seq, cmd):
         msglen = MESSAGE_MIN + len(cmd)

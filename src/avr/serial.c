@@ -73,7 +73,7 @@ DECL_CONSTANT_STR("RESERVE_PINS_serial", "PJ0,PJ1");
 #define USARTx_UDRE_vect AVR_SERIAL_REG(USART, CONFIG_SERIAL_PORT, _UDRE_vect)
 #endif
 
-
+/*
 void
 serial_init(void)
 {
@@ -85,7 +85,7 @@ serial_init(void)
     
 }
 DECL_INIT(serial_init);
-
+*/
 
 void
 spi_init(void)
@@ -105,14 +105,16 @@ spi_init(void)
 }
 DECL_INIT(spi_init);
 
-// Rx interrupt - encoder positon data
+/* Rx interrupt - encoder positon data
 ISR(USARTx_RX_vect)
 {
     serial_rx_byte(UDRx);
 }
+*/
+
 
 uint_fast8_t packet_len = 0;
-uint_fast8_t dbg = 0;
+
 ISR (SPI_STC_vect)
 {  
     if (packet_len >0){  
