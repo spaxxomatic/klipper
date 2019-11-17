@@ -38,7 +38,8 @@ static const char *cssl_errors[]= {
     "cssl: null pointer",
     "cssl: oops",
     "cssl: out of memory",
-    "cssl: cannot open file"
+    "cssl: cannot open file",
+    "cssl: cannot lock the device/file for exclusive use "
 };
 
 /* status of last cssl function */ 
@@ -74,12 +75,12 @@ int cssl_geterror()
  */
 
 /* starts cssl */
-void cssl_start()
+int cssl_start()
 {
     int sig;
 
     if (cssl_started) {
-	return;
+	return 0;
     }
 
     /* Here we scan for unused real time signal */
@@ -104,7 +105,7 @@ void cssl_start()
 	    /* OK, the cssl is started */
 	    cssl_started=1;
 	    cssl_error=CSSL_OK;
-	    return;
+	    return 0;
 	} else {
 	    /* signal handler was not empty, 
 	       restore original */
@@ -116,6 +117,7 @@ void cssl_start()
 
     /* Sorry, there's no free signal */
     cssl_error=CSSL_ERROR_NOSIGNAL;
+    return -1;
     
 }
 
@@ -170,23 +172,28 @@ cssl_t *cssl_open(const char *fname,
 
     /* opening the file */
     if(callback) {
-	/* user wants event driven reading */
-	serial->fd=open(fname,O_RDWR|O_NOCTTY|O_NONBLOCK);
-	fcntl(serial->fd,F_SETSIG,CSSL_SIGNAL);
-	fcntl(serial->fd,F_SETOWN,getpid());
-	fcntl(serial->fd,F_SETFL,O_ASYNC|O_NONBLOCK);
+        /* user wants event driven reading */
+        serial->fd=open(fname,O_RDWR|O_NOCTTY|O_NONBLOCK);
+        fcntl(serial->fd,F_SETSIG,CSSL_SIGNAL);
+        fcntl(serial->fd,F_SETOWN,getpid());
+        fcntl(serial->fd,F_SETFL,O_ASYNC|O_NONBLOCK);
     } else {
 	/* the read/write operations will be bloking */
-	serial->fd=open(fname,O_RDWR|O_NOCTTY);
+	    serial->fd=open(fname,O_RDWR|O_NOCTTY);
     }
 
     /* oops, cannot open */
     if (serial->fd == -1) {
-	cssl_error=CSSL_ERROR_OPEN;
-	free(serial);
-	return NULL;
+        cssl_error=CSSL_ERROR_OPEN;
+        free(serial);
+        return NULL;
     }
-
+    //locl the serial interface for exclusive use. If already locked, raise error
+    if (lockf(serial->fd, F_TLOCK, 0) != 0){
+        cssl_error=CSSL_ERROR_CANNOT_LOCK;
+        free(serial);
+        return NULL;
+    }
     /* we remember old termios */
     tcgetattr(serial->fd,&(serial->oldtio));
     
@@ -540,6 +547,7 @@ int cssl_getdata(cssl_t *serial,
 /* The most important: signal handler */
 void cssl_handler(int signo, siginfo_t *info, void *ignored)
 {
+    printf("Sig %i code %i \n", signo, info->si_code);
     cssl_t *cur;
     int n;
 

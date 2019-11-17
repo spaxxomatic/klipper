@@ -17,6 +17,10 @@ class SerialReader:
         self.reactor = reactor
         self.serialport = serialport
         self.baud = baud
+        #nutiu TODO self.scales_serial_port = config.get('encoder_serial_port')
+        #nutiu TODO self.scales_baud = config.getint('encoder_baud')
+        self.scales_serial_port = '/dev/ttyAMA0'
+        self.scales_baud = 115200
         # Serial port
         self.ser = None
         self.msgparser = msgproto.MessageParser()
@@ -69,6 +73,18 @@ class SerialReader:
                 identify_data += msgdata
             if self.reactor.monotonic() > timeout:
                 raise error("Timeout during identify")
+    
+    def _connect_encoder(self):
+        try:
+            if self.scales_baud:
+                self.scales_fd = serial.Serial(
+                    self.scales_serial_port, self.scales_baud, timeout=0, exclusive=True)
+            else:
+                self.scales_fd = open(self.scales_serial_port, 'rb+')
+        except (OSError, IOError, serial.SerialException) as e:
+            logging.error("Unable to connect encoder via port: %s", e)
+        return self.scales_fd
+
     def connect(self):
         # Initial connection
         logging.info("Starting serial connect")
@@ -89,8 +105,9 @@ class SerialReader:
             #nutiu     continue
             #nutiu if self.baud:
             #nutiu     stk500v2_leave(self.ser, self.reactor)
-            self.serialqueue = self.ffi_lib.spiqueue_alloc(
-                '/dev/spidev0.0', 0, self.baud)
+            self.serialqueue = self.ffi_lib.spiqueue_alloc(self.serialport, 0, self.baud)
+            self._connect_encoder()
+            self.ffi_lib.init_encoder_poll(self.serialqueue, self.scales_fd.fileno())
             self.background_thread = threading.Thread(target=self._bg_thread)
             self.background_thread.start()
             # Obtain and load the data dictionary from the firmware

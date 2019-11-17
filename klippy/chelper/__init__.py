@@ -111,7 +111,7 @@ defs_serialqueue = """
         int len;
         double sent_time, receive_time;
     };
-    
+    void init_encoder_poll(struct serialqueue * sq, int encoder_fd);
     struct serialqueue *spiqueue_alloc(char* spi_device, int write_only, uint32_t speed);
     struct serialqueue *serialqueue_alloc(int serial_fd, int write_only);
     void serialqueue_exit(struct serialqueue *sq);

@@ -33,6 +33,7 @@
 #include "spi_mcu_comm.h" // spi comm functions
 #include "serialqueue.h" // struct queue_message
 #include "trace.h"
+#include "pos_decode.h"
 
 /****************************************************************
  * Poll reactor
@@ -404,6 +405,7 @@ struct serialqueue {
     // Input reading
     struct pollreactor pr;
     int serial_fd;
+    int encoder_fd;
     int pipe_fds[2];
     uint8_t input_buf[4096];
     uint8_t need_sync;
@@ -442,7 +444,8 @@ struct serialqueue {
 */
 
 #define SQPF_PIPE   0
-#define SQPF_NUM    1 //number of file descriptor polls
+#define SQPF_ENCODER_CONN 1
+#define SQPF_NUM    2 //number of file descriptor polls
 
 #define SQPT_RETRANSMIT 0
 #define SQPT_COMMAND    1
@@ -888,6 +891,28 @@ background_thread(void *data)
     return NULL;
 }
 
+// Callback for input activity on the serial fd
+void
+position_change_event(struct serialqueue *sq, double eventtime)
+{
+    char pos_buff[512];
+    int ret = read(sq->encoder_fd,pos_buff, sizeof(pos_buff));
+    if (ret <= 0) {
+        report_errno("Read pos", ret);
+        pollreactor_do_exit(&sq->pr);
+        return;
+    }
+    receive_position_info(0,  (uint8_t*) pos_buff, ret);
+    trace_msg(2, "POS x %f y %f\n", get_x_pos(), get_y_pos());
+}
+
+
+void __visible init_encoder_poll(struct serialqueue* sq, int encoder_fd){
+    //add a poller for the postion encoder comm
+    sq->encoder_fd = encoder_fd;
+    pollreactor_add_fd(&sq->pr, SQPF_ENCODER_CONN, encoder_fd, position_change_event);
+    set_non_blocking(encoder_fd);
+}
 // Create a new 'struct serialqueue' object
 struct serialqueue * __visible
 serialqueue_alloc(int serial_fd, int write_only)
@@ -904,7 +929,7 @@ serialqueue_alloc(int serial_fd, int write_only)
     //nutiu - when in SPI mode, polling the POLLIN or POLLHUP will not work since the SPI is amster-slave
     // The slave will set a pin when there is data to be read
     //if (!write_only)
-    //    pollreactor_add_fd(&sq->pr, SQPF_SERIAL, serial_fd, input_event);
+    //pollreactor_add_fd(&sq->pr, SQPF_SERIAL, encoder_fd, input_event);
 
 
     pollreactor_add_fd(&sq->pr, SQPF_PIPE, sq->pipe_fds[0], kick_event);

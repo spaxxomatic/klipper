@@ -61,8 +61,6 @@ get_y_ticks_pos(){
     return Y_axis.abs_position;
 }
 
-
-
 //AS5311 delivers a 12 bit absolute position inside the 2 mm pole spacing
 //in order to detect the movement over the index position, we need to check if the previous absolute value is near index 
 //and the actual position over it 
@@ -108,7 +106,7 @@ uint16_t* pkt_ptr;
 #define PAYLOAD_READ_DONE READING_PAYLOAD+1
 
 /* callback function to be called by the cssl on data arrival */
-static void callback(int id, uint8_t *buf, int length)
+void receive_position_info(int id, uint8_t *buf, int length)
 {
     //The data format consists of 4 bytes: axis name, upper byte, lower byte, CR
     //Upper byte = 0xFF signalises an error. Error code is then the lower byte	
@@ -142,21 +140,25 @@ static void callback(int id, uint8_t *buf, int length)
         }
 
     }
-    //putchar(buf[i]);    fflush(stdout);
 }
 
+/*
 cssl_t *serial;
 
 int __visible
 init_encoder_comm(char* serial_port, int baudrate){
-    cssl_start();
-    //serial=cssl_open("/dev/ttyAMA0",callback,0,115200,8,0,1);
+    if (cssl_start() != 0){
+        trace_msg(0, "Cannot initialize cssl %s\n",cssl_geterrormsg());
+        return -1;
+    };
     serial=cssl_open(serial_port,callback,0,baudrate,8,0,1);
+    //serial=cssl_open(serial_port,NULL,0,baudrate,8,0,1);
     if (!serial) {
 		trace_msg(0, "Cannot setup connection to %s %s\n",serial_port, cssl_geterrormsg());
-        pabort("Encoder connection failure");
+        pabort("Pos encoder connection failure");
 		return -1;
     }
+    trace_msg(2, "Pos encoder conn open on %s at %i baud\n", serial_port, baudrate);
     return 0;
 }
 
@@ -164,5 +166,6 @@ void  __visible
 shutdown_encoder(){
     cssl_close(serial);
     cssl_stop();
+    trace_msg(2, "Pos encoder conn closed\n");
 }
-
+*/

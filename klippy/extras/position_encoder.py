@@ -31,16 +31,20 @@ class PositionFeedback:
     def _bg_thread(self):
         #self.axis_stat = 
         while 1:
-            axis_stat = self.ffi_lib.get_axis_stat()
-            #print ("X POS " + str(x_pos))
-            time.sleep(1)
+            #axis_stat = self.ffi_lib.get_axis_stat()
+            x_pos = self.ffi_lib.get_x_pos()
+            y_pos = self.ffi_lib.get_y_pos()
+            print ("POS X:%f Y:%f"%(x_pos, y_pos))
+            time.sleep(2)
     def connect(self):
         # Initial connection
         logging.info("Connecting encoders")
         #start_time = self.reactor.monotonic()
-        self.ffi_lib.init_encoder_comm(self.encoder_serial_port, self.baud)
-        self.background_thread = threading.Thread(target=self._bg_thread)
-        self.background_thread.start()
+        #if (self.ffi_lib.init_encoder_comm(self.encoder_serial_port, self.baud) != 0):
+        #    raise Exception("Cannot connect encoders")
+        
+        #self.background_thread = threading.Thread(target=self._bg_thread)
+        #self.background_thread.start()
         
     def disconnect(self):
         if self.background_thread is not None:

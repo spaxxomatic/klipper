@@ -57,6 +57,7 @@ process_read_buffer(struct serialqueue *sq, double eventtime);
 
 void kick_mcu_data_transfer(struct serialqueue *sq);
 
+void init_encoder_poll(struct serialqueue* sq, int encoder_fd);
 struct serialqueue *serialqueue_alloc(int serial_fd, int write_only);
 void serialqueue_exit(struct serialqueue *sq);
 void serialqueue_free(struct serialqueue *sq);

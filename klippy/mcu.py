@@ -447,6 +447,7 @@ class CommandWrapper:
         except serialhdl.error as e:
             raise error(str(e))
 
+
 class MCU:
     error = error
     def __init__(self, config, clocksync):

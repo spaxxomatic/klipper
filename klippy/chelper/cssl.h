@@ -38,7 +38,8 @@ typedef enum {
     CSSL_ERROR_NULLPOINTER,  /* you gave a null pointer to the function */
     CSSL_ERROR_OOPS,         /* internal error, something's erong */
     CSSL_ERROR_MEMORY,       /* there's no memory for cssl_t structure */
-    CSSL_ERROR_OPEN          /* file doesnt exist or you aren't good user */
+    CSSL_ERROR_OPEN,          /* file doesnt exist or you aren't good user */
+	CSSL_ERROR_CANNOT_LOCK   /* cannot lock the device/file for exclusive use */
 } cssl_error_t;
 
 /* get the error message */
@@ -48,7 +49,7 @@ const char *cssl_geterrormsg();
 int cssl_geterror();
 
 /* start the cssl */
-void cssl_start();
+int cssl_start();
 
 /* finish all jobs, clear memory, etc. */
 void cssl_stop();
