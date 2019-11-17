@@ -901,9 +901,11 @@ position_change_event(struct serialqueue *sq, double eventtime)
         report_errno("Read pos", ret);
         pollreactor_do_exit(&sq->pr);
         return;
-    }
+    } 
+    //trace_buffer("POS", pos_buff, ret);
     receive_position_info(0,  (uint8_t*) pos_buff, ret);
-    trace_msg(2, "POS x %f y %f\n", get_x_pos(), get_y_pos());
+    trace_msg(2, "POS x%0.3f y%0.3f ", get_x_pos(), get_y_pos());
+    //trace_msg(2, "POS x %i y %i \n", get_x_ticks_pos(), get_y_ticks_pos());
 }
 
 

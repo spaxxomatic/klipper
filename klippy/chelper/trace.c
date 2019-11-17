@@ -27,20 +27,21 @@ void trace_msg(uint8_t level, const char* fmt, ...){
         vprintf(fmt, args);
         printf("\n");
         fflush(stdout);
-        va_end(args);        
+        va_end(args);
     }
 }
 
 #ifdef DEBUG
 void trace_buffer(char* prefix, char* buff, int len){
-    
-        trace_msg(2, prefix);
-        trace_msg(2, ": ");
+       
+        printf(prefix);
+        printf(": ");
         int i = 0;
         for ( i = 0; i < len; i++) {
-            trace_msg(2,"%.2X:", buff[i]);
+            printf("%.2X:", buff[i]);
         }
-		trace_msg(2,"\r\n");
+		printf("\n");
+        fflush(stdout); 
 }
 #else
 void trace_buffer(char* prefix, char* buff, int len){}

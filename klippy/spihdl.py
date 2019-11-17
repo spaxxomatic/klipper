@@ -93,18 +93,6 @@ class SerialReader:
             connect_time = self.reactor.monotonic()
             if connect_time > start_time + 150.:
                 raise error("Unable to connect")
-            #nutiu try:
-            #nutiu     if self.baud:
-            #nutiu         self.ser = serial.Serial(
-            #nutiu             self.serialport, self.baud, timeout=0, exclusive=True)
-            #nutiu     else:
-            #nutiu         self.ser = open(self.serialport, 'rb+')
-            #nutiu except (OSError, IOError, serial.SerialException) as e:
-            #nutiu     logging.warn("Unable to open port: %s", e)
-            #nutiu     self.reactor.pause(connect_time + 5.)
-            #nutiu     continue
-            #nutiu if self.baud:
-            #nutiu     stk500v2_leave(self.ser, self.reactor)
             self.serialqueue = self.ffi_lib.spiqueue_alloc(self.serialport, 0, self.baud)
             self._connect_encoder()
             self.ffi_lib.init_encoder_poll(self.serialqueue, self.scales_fd.fileno())

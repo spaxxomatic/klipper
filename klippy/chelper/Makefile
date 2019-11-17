@@ -6,7 +6,7 @@ CP := cp
 
 
 TARGETLIB := c_helper.so
-EXTRA_CFLAGS :=  -Wall -g -O2 -shared -fPIC -flto -fwhole-program -std=gnu11 -D_GNU_SOURCE
+EXTRA_CFLAGS :=  -Wall -g -O2 -shared -fPIC -flto -fwhole-program -std=gnu11 -D_GNU_SOURCE $(DEBUG)
 
 SRC :=   $(wildcard *.c)
 
