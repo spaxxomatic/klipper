@@ -5,6 +5,7 @@
 #include <stdlib.h> 
 #include <unistd.h> 
 #include <linux/types.h>
+#include "compiler.h" // __visible
 
 uint8_t trace_level = 0;
 #define TRC_ERROR 0
@@ -14,7 +15,7 @@ uint8_t trace_level = 0;
 
 char* trc_prefix[4] = {"ERROR: ", "WARN: ", "INFO: ", "DEBUG: "};
 
-void set_trace_level(uint8_t  t){
+void __visible set_trace_level(uint8_t  t){
     trace_level = t;
 }
 
@@ -41,7 +42,7 @@ void trace_buffer(char* prefix, char* buff, int len){
             printf("%.2X:", buff[i]);
         }
 		printf("\n");
-        fflush(stdout); 
+        fflush(stdout);  
 }
 #else
 void trace_buffer(char* prefix, char* buff, int len){}

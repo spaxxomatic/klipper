@@ -7,6 +7,7 @@ import logging, threading
 import serial
 import chelper
 import time
+import serial
 class error(Exception):
     pass
 
@@ -17,7 +18,7 @@ class PositionFeedback:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.encoder_serial_port = config.get('encoder_serial_port')
-        self.baud = config.getint('encoder_baud')
+        self.scales_baud = config.getint('encoder_baud')
         self.printer.register_event_handler("klippy:ready", self.connect)
         self.printer.register_event_handler("klippy:disconnect", self.disconnect)
         # Serial port
@@ -39,17 +40,24 @@ class PositionFeedback:
     def connect(self):
         # Initial connection
         logging.info("Connecting encoders")
-        #start_time = self.reactor.monotonic()
-        #if (self.ffi_lib.init_encoder_comm(self.encoder_serial_port, self.baud) != 0):
-        #    raise Exception("Cannot connect encoders")
-        
-        #self.background_thread = threading.Thread(target=self._bg_thread)
-        #self.background_thread.start()
+        try:
+            self.scales_fd = serial.Serial(
+                self.encoder_serial_port, self.scales_baud, timeout=0, exclusive=True)
+            #else:
+            #    self.scales_fd = open(self.scales_serial_port, 'rb+')
+        except (OSError, IOError, serial.SerialException) as e:
+            logging.error("Unable to connect encoder via port %s:"%self.encoder_serial_port ,e)
+        self.serialqueue = self.ffi_lib.get_serialqueue()
+        self.ffi_lib.init_encoder_poll(self.serialqueue, self.scales_fd.fileno())
+        return self.scales_fd
+
         
     def disconnect(self):
         if self.background_thread is not None:
             self.background_thread.join()
-        self.ffi.shutdown_encoder()
+        if self.scales_fd is not None:
+            self.scales_fd.close()
+            self.scales_fd = None
 
     def __del__(self):
         self.disconnect()

@@ -120,7 +120,7 @@ void cleanup_mcu_buffer(){
             pabort("SPI error");
         }        
         int j=0;
-        trace_buffer("CB", rx_buff, buff_len);
+        //trace_buffer("CB", rx_buff, buff_len);
         for (i = 0; i < buff_len; i++){
             if (rx_buff[i] == MESSAGE_ESCAPE ){ 
                 j++;
@@ -145,7 +145,7 @@ int setup_spi_comm(char* spi_device, uint32_t speed){
 			pabort("SPI has been opened but the handle is invalid");
 		}
 	}
-	set_trace_level(2);
+	set_trace_level(0);
 	setupSlaveIrq();
     prepare_read_buff();
 	spi_fd = open(spi_device, O_RDWR);
@@ -207,8 +207,6 @@ int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes s
         if (buff[expected_bytes-1] != MESSAGE_SYNC){
             trace_msg(0," !!Internal error !! Message end is not SYN but %.2X \r\n", buff[expected_bytes-1]);
         }
-        //char* last_bytes = &buff[expected_bytes];
-        //trace_msg(2,"And last 3 %.2X:%.2X:%.2X \r\n", *last_bytes, *(last_bytes + 1), *(last_bytes + 2));
         char last_byte = buff[expected_bytes+2];
         if ( last_byte != MESSAGE_ESCAPE){ //there must be another mesage awaiting on the MCU side
             spi_read_buff.data[spi_read_buff.len++] = last_byte;
@@ -218,47 +216,7 @@ int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes s
     free(buff);
     return ret;
 }
-/*
-int _transfer_mcu_bytes(int expected_bytes){ //will return the number of bytes still left on the MCU side
-    //We read one more byte than requested, to check if another message follows 
-    //or it's a MESSAGE_ESCAPE, which signals an empty buffer
-    int transmission_len = expected_bytes+2; 
-    
-    char* buff = malloc(transmission_len); 
-    memset(buff, NULL_BYTE_MASTER, transmission_len); //we send only nulls
-    xfer[0].rx_buf = (unsigned long)buff;
-	xfer[0].len = transmission_len;
-    xfer[0].tx_buf = (unsigned long)buff;
-    int ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), xfer);
-	trace_msg(0,"Will read %i + 2  ", expected_bytes);    
-	if (ret < 1) {
-        pabort("can't read spi message");
-    }else{
-        ret = 0;
-        trace_buffer("Transfer", buff, transmission_len);
-        int i = 0;
-        for ( i = 0; i < expected_bytes; i++) {
-            if (buff[i] == MESSAGE_ESCAPE){
-                if (buff[i+1] == MESSAGE_ESCAPE){
-                    //skip
-                    i++;
-                }else{
-                    spi_read_buff.data[spi_read_buff.len++] = buff[i]; //todo - replace with memcpy
-                }; 
-            }else{
-                spi_read_buff.data[spi_read_buff.len++] = buff[i]; //todo - replace with memcpy
-            }
-        }
-        if (buff[expected_bytes-1] != MESSAGE_SYNC){
-            trace_msg(2," !!Internal err!! Message end is not SYN but %.2X \r\n", buff[expected_bytes-1]);
-        }
-        char* last_bytes = &buff[expected_bytes];
-        trace_msg(2,"And last 2 %.2X:%.2X \r\n", *last_bytes, *(last_bytes + 1));
-    }
-    free(buff);
-    return ret;
-}
-*/
+
 int read_all_mcu_data(int expected_bytes){
     int cycle= 0;         
     while (cycle++ < MAX_CONSECUTIVE_TRANSFER){
@@ -279,11 +237,10 @@ int read_all_mcu_data(int expected_bytes){
 int spi_read() {
 	int ret = 0;
     // If the MCU data tranfer pin is still high, we have data to read
-    if (getPinStatus(SPI_SLAVE_IRQ_GPIO_PIN) == 0) {
-        //trace_msg(3,"rx0 ! ");    
+    if (getPinStatus(SPI_SLAVE_IRQ_GPIO_PIN) == 0) {        
         return spi_read_buff.len ;
     }
-    trace_msg(3,"rx1 ! ");    
+    //trace_msg(3,"rx1 ! ");    
     int packet_len = 0;
     if (spi_read_buff.this_message_len > 0){
         trace_msg(0,"ERR: read while buffer not clean\n");
@@ -343,8 +300,8 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
         trace_msg(0,"can't send spi message\n");
         ret = -1;
     }else{
-        //trace_buffer("TX", inp_buff, buff_len);
-        //trace_buffer("RX", rx_buff, buff_len);
+        trace_buffer("TX", inp_buff, buff_len);
+        trace_buffer("RX", rx_buff, buff_len);
         //There should be not any payload data while we're sendinf. We must receive back the data we've sent, by the nature of SPI 
         int i ;
         for (i=1; i < buff_len; i++){
@@ -353,37 +310,6 @@ int spi_write(struct serialqueue *sq,  char* inp_buff, int buff_len, int is_retr
             }
         }
         kick_mcu_data_transfer(thissq);  //make sure the read is not suspended
-        /*   
-        while(i < buff_len){            
-            if (rx_buff[i] != MESSAGE_ESCAPE){ //Whatever we receive besides an escape must be the beginning of a data packet
-                spi_read_buff.this_message_len = rx_buff[i]; //there is message data in the read buffer
-                while(spi_read_buff.this_message_len>0) {
-                    //transfer the whole message or at least as much as the buffer contains
-                    spi_read_buff.data[spi_read_buff.len++] = rx_buff[i++];
-                    if (i == buff_len) break;
-                    spi_read_buff.this_message_len --;
-                }
-                trace_buffer("DCD ", spi_read_buff.data, spi_read_buff.len);
-            }
-            i++;
-        };
-
-        if (spi_read_buff.len > 0){
-            //there was some payload in data received 
-            if (spi_read_buff.this_message_len > 0){
-                //there are still bytes to be read, the last packet was not complete
-                trace_msg(2,"Kick transfer for rest of %i bytes\n", spi_read_buff.this_message_len);
-                //kick_mcu_data_transfer(thissq);
-                read_all_mcu_data(spi_read_buff.this_message_len-1);
-                
-            }else{
-                // a full packet waits in the buffer. Will be picked up by the next call to read
-                //kick_mcu_data_transfer(thissq);
-            }
-            //spi_read_buff.this_message_len = 0;//done reading remote buffer
-        }   
-        kick_mcu_data_transfer(thissq);  //make sure the read is not suspended
-        */
     }
     free(rx_buff);
     
@@ -394,5 +320,11 @@ struct serialqueue * __visible
 spiqueue_alloc(char* spi_device, int write_only, uint32_t speed)
 {
     thissq = serialqueue_alloc(setup_spi_comm(spi_device, speed), write_only);   
+	return thissq;
+}
+
+struct serialqueue * __visible
+get_serialqueue()
+{
 	return thissq;
 }

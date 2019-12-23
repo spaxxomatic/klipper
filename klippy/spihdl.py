@@ -17,10 +17,6 @@ class SerialReader:
         self.reactor = reactor
         self.serialport = serialport
         self.baud = baud
-        #nutiu TODO self.scales_serial_port = config.get('encoder_serial_port')
-        #nutiu TODO self.scales_baud = config.getint('encoder_baud')
-        self.scales_serial_port = '/dev/ttyAMA0'
-        self.scales_baud = 115200
         # Serial port
         self.ser = None
         self.msgparser = msgproto.MessageParser()
@@ -47,9 +43,6 @@ class SerialReader:
             params['#sent_time'] = response.sent_time
             params['#receive_time'] = response.receive_time
             hdl = (params['#name'], params.get('oid'))
-            #print "----- %f %f %s %s"%(response.sent_time, response.receive_time, params['#name'], params.get('oid')) 
-            #for p in params:
-            #    print "%s %s"%(p, params[p])
             try:
                 with self.lock:
                     hdl = self.handlers.get(hdl, self.handle_default)
@@ -61,10 +54,7 @@ class SerialReader:
         identify_data = ""
         while 1:
             msg = "identify offset=%d count=%d" % (len(identify_data), 40)
-            #print "--------------_get_identify_data: " + msg
             params = self.send_with_response(msg, 'identify_response')
-            #print "Offset %i"%params['offset']
-            #print "Len data %i"%len(identify_data)
             if params['offset'] == len(identify_data):
                 msgdata = params['data']
                 if not msgdata:
@@ -73,17 +63,6 @@ class SerialReader:
                 identify_data += msgdata
             if self.reactor.monotonic() > timeout:
                 raise error("Timeout during identify")
-    
-    def _connect_encoder(self):
-        try:
-            if self.scales_baud:
-                self.scales_fd = serial.Serial(
-                    self.scales_serial_port, self.scales_baud, timeout=0, exclusive=True)
-            else:
-                self.scales_fd = open(self.scales_serial_port, 'rb+')
-        except (OSError, IOError, serial.SerialException) as e:
-            logging.error("Unable to connect encoder via port: %s", e)
-        return self.scales_fd
 
     def connect(self):
         # Initial connection
@@ -94,8 +73,6 @@ class SerialReader:
             if connect_time > start_time + 150.:
                 raise error("Unable to connect")
             self.serialqueue = self.ffi_lib.spiqueue_alloc(self.serialport, 0, self.baud)
-            self._connect_encoder()
-            self.ffi_lib.init_encoder_poll(self.serialqueue, self.scales_fd.fileno())
             self.background_thread = threading.Thread(target=self._bg_thread)
             self.background_thread.start()
             # Obtain and load the data dictionary from the firmware

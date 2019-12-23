@@ -11,6 +11,8 @@
 
 struct serialqueue;
 struct serialqueue * spiqueue_alloc(char* spi_device, int write_only, uint32_t speed);
+struct serialqueue * get_serialqueue();
+
 void close_spi() ;
 void check_mcu_data_pending();
 

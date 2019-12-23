@@ -38,6 +38,12 @@ config, and restart the host software.
 Error configuring printer
 """
 
+message_encoder_connect_error = """
+Encoder connection could not be established. The encoder must 
+be connected to the serial port of the Raspi board. 
+Please check your config. 
+"""
+
 message_shutdown = """
 Once the underlying issue is corrected, use the
 "FIRMWARE_RESTART" command to reset the firmware, reload the

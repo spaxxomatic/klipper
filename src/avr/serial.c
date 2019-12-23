@@ -30,7 +30,6 @@ static const uint8_t SCK = GPIO('B', 1), SS = GPIO('B', 0);
 DECL_CONSTANT_STR("BUS_PINS_spi", "PB3,PB2,PB1");
 #endif
 
-
 // Reserve serial pins
 #if CONFIG_SERIAL_PORT == 0
  #if CONFIG_MACH_atmega1280 || CONFIG_MACH_atmega2560
@@ -90,28 +89,17 @@ DECL_INIT(serial_init);
 void
 spi_init(void)
 {
-    //gpio_out_setup(SS, 0);
-    gpio_in_setup(SCK, 0);
-    gpio_in_setup(MOSI, 0);
-    gpio_out_setup(MISO, 0);      
   //setup spi as slave
-  //pinMode(MISO,OUTPUT);
+  //gpio_out_setup(SS, 0);
+  gpio_in_setup(SCK, 0);
+  gpio_in_setup(MOSI, 0);
+  gpio_out_setup(MISO, 0);      
 
-  //pinMode(MISO,OUTPUT);     
-   SPCR=(1<<SPE)|(1<<SPIE);  // Turn on SPI in Slave Mode, turn on interrupt
-  //digitalWrite(TX_REQ_PIN, LOW);  
-  //pinMode(TX_REQ_PIN, OUTPUT);
-   tx_req_pin = gpio_out_setup(TX_REQ_PIN, 0);      
+  SPCR=(1<<SPE)|(1<<SPIE);  // Turn on SPI in Slave Mode, turn on interrupt
+  tx_req_pin = gpio_out_setup(TX_REQ_PIN, 0);      
 }
+
 DECL_INIT(spi_init);
-
-/* Rx interrupt - encoder positon data
-ISR(USARTx_RX_vect)
-{
-    serial_rx_byte(UDRx);
-}
-*/
-
 
 uint_fast8_t packet_len = 0;
 
@@ -137,15 +125,15 @@ ISR (SPI_STC_vect)
     };
  }
 
-
+/*
 ISR(USARTx_UDRE_vect)
 {
-    /*uint8_t data;
+    uint8_t data;
     int ret = serial_get_tx_byte(&data);
     if (ret)
         UCSRxB &= ~(1<<UDRIEx);
     else
         UDRx = data;
-    */
      UDRx = 'a';
 }
+*/

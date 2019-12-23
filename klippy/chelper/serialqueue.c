@@ -405,7 +405,7 @@ struct serialqueue {
     // Input reading
     struct pollreactor pr;
     int serial_fd;
-    int encoder_fd;
+    int encoder_fd; 
     int pipe_fds[2];
     uint8_t input_buf[4096];
     uint8_t need_sync;
@@ -438,7 +438,8 @@ struct serialqueue {
     uint32_t bytes_write, bytes_read, bytes_retransmit, bytes_invalid;
 };
 
-/*nutiu #define SQPF_SERIAL 0
+/*nutiu 
+#define SQPF_SERIAL 0
 #define SQPF_PIPE   1
 #define SQPF_NUM    2 //number of file handle polls
 */
@@ -590,7 +591,7 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
             sq->last_ack_seq = rseq;
         else if (rseq > sq->ignore_nak_seq && !list_empty(&sq->sent_queue))
             // Duplicate Ack is a Nak - do fast retransmit
-            trace_msg(2, "nak retry\n");
+            trace_msg(1, "nak retry\n");
             pollreactor_update_timer(&sq->pr, SQPT_RETRANSMIT, PR_NOW);
     }
 
@@ -627,7 +628,7 @@ transfer_mcu_data(struct serialqueue *sq, double eventtime)
     if (copy_len >= sizeof(sq->input_buf) - sq->input_pos){ 
         //if not enough space in the buffer
         copy_len = sizeof(sq->input_buf) - sq->input_pos; 
-        trace_msg(1,"Buffer too small. Need %i but only %i available \n", spi_read_buff.len, copy_len);
+        trace_msg(0,"Buffer too small. Need %i but only %i available \n", spi_read_buff.len, copy_len);
     }
     memcpy(&sq->input_buf[sq->input_pos], data, copy_len);
     sq->input_pos += copy_len;
@@ -895,7 +896,7 @@ background_thread(void *data)
 void
 position_change_event(struct serialqueue *sq, double eventtime)
 {
-    char pos_buff[512];
+    char pos_buff[64];
     int ret = read(sq->encoder_fd,pos_buff, sizeof(pos_buff));
     if (ret <= 0) {
         report_errno("Read pos", ret);
@@ -905,7 +906,7 @@ position_change_event(struct serialqueue *sq, double eventtime)
     //trace_buffer("POS", pos_buff, ret);
     receive_position_info(0,  (uint8_t*) pos_buff, ret);
     trace_msg(2, "POS x%0.3f y%0.3f ", get_x_pos(), get_y_pos());
-    //trace_msg(2, "POS x %i y %i \n", get_x_ticks_pos(), get_y_ticks_pos());
+    //trace_msg(1, "POS x %i y %i \n", get_x_ticks_pos(), get_y_ticks_pos());
 }
 
 
@@ -1065,7 +1066,7 @@ serialqueue_send_batch(struct serialqueue *sq, struct command_queue *cq
 
     // Add list to cq->stalled_queue
     //pid_t thread_id = syscall(__NR_gettid);
-    //trace_msg(3, "serialqueue_send_batch tid: %i \n", thread_id);
+    trace_msg(3, "serialqueue_send_batch  \n" );
     pthread_mutex_lock(&sq->lock);
     if (list_empty(&cq->ready_queue) && list_empty(&cq->stalled_queue))
         list_add_tail(&cq->node, &sq->pending_queues);

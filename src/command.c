@@ -175,8 +175,8 @@ command_encode_and_frame(uint8_t *buf, const struct command_encoder *ce
     uint_fast8_t msglen = command_encodef(buf, ce, args);
     command_add_frame(buf, msglen);
     buf[msglen] = MESSAGE_ESCAPE; //nutiu
-    buf[msglen+1] = MESSAGE_ESCAPE; //nutiu
-    return msglen + 2; //nutiu +2
+    buf[msglen+1] = MESSAGE_ESCAPE; 
+    return msglen + 2;
 }
 
 static uint8_t in_sendf;

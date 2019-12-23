@@ -368,8 +368,6 @@ class MessageParser:
             self.messages_by_id[msgid] = msg
             self.messages_by_name[msg.name] = msg
     def process_identify(self, data, decompress=True):
-        #nutiu
-        print "------process_identify------"
         try:
             if decompress:
                 data = zlib.decompress(data)

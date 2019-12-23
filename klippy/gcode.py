@@ -3,7 +3,7 @@
 # Copyright (C) 2016-2019  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import os, re, logging, collections, shlex
+import os, re, logging, collections, shlex, chelper
 import homing, kinematics.extruder
 
 # Parse and handle G-Code commands
@@ -36,6 +36,7 @@ class GCodeParser:
         self.ready_gcode_handlers = {}
         self.mux_commands = {}
         self.gcode_help = {}
+        self.ffi_main, self.ffi_lib = chelper.get_ffi()
         for cmd in self.all_handlers:
             func = getattr(self, 'cmd_' + cmd)
             wnr = getattr(self, 'cmd_' + cmd + '_when_not_ready', False)
@@ -477,7 +478,7 @@ class GCodeParser:
         'SET_GCODE_OFFSET', 'M206', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE',
         'M105', 'M104', 'M109', 'M140', 'M190', 'M106', 'M107',
         'M112', 'M115', 'IGNORE', 'GET_POSITION',
-        'RESTART', 'FIRMWARE_RESTART', 'ECHO', 'STATUS', 'HELP']
+        'RESTART', 'FIRMWARE_RESTART', 'ECHO', 'STATUS', 'HELP', 'TRACE_COMM']
     # G-Code movement commands
     cmd_G1_aliases = ['G0']
     def cmd_G1(self, params):
@@ -739,6 +740,12 @@ class GCodeParser:
     cmd_ECHO_when_not_ready = True
     def cmd_ECHO(self, params):
         self.respond_info(params['#original'], log=False)
+    cmd_TRACE_COMM_when_not_ready = True
+    cmd_TRACE_COMM_help = "Enable MCU communication trace"
+    def cmd_TRACE_COMM(self, params):
+        trace_level = self.get_int('T', params, 0)
+        self.ffi_lib.set_trace_level(trace_level)
+        self.respond_info("Trace level set to %i"%trace_level)
     cmd_STATUS_when_not_ready = True
     cmd_STATUS_help = "Report the printer status"
     def cmd_STATUS(self, params):
