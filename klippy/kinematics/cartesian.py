@@ -13,6 +13,9 @@ class CartKinematics:
         self.rails = [stepper.LookupMultiRail(config.getsection('stepper_' + n))
                       for n in ['x', 'y', 'z']]
         for rail, axis in zip(self.rails, 'xyz'):
+            print "CartKinematics"
+            print rail 
+            print axis
             rail.setup_itersolve('cartesian_stepper_alloc', axis)
         # Setup boundary checks
         max_velocity, max_accel = toolhead.get_max_velocity()

@@ -5,12 +5,14 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import sys, os, zlib, logging, math
 import serialhdl, pins, chelper, clocksync
+import traceback
 
 class error(Exception):
     pass
 
 class MCU_stepper:
     def __init__(self, mcu, pin_params):
+        print "MCU_stepper"
         self._mcu = mcu
         self._oid = oid = self._mcu.create_oid()
         self._mcu.register_config_callback(self._build_config)
@@ -62,9 +64,14 @@ class MCU_stepper:
             "reset_step_clock oid=%c clock=%u")
         self._get_position_cmd = self._mcu.lookup_command(
             "stepper_get_position oid=%c")
+        #position_adjust_cmd_id = self._mcu.lookup_command_id(
+        #    "position_adjust oid=%c pos_error_count=%hi")         
+        #self._ffi_lib.set_mcu_position_adjust_id(position_adjust_cmd_id)
         self._ffi_lib.stepcompress_fill(
             self._stepqueue, self._mcu.seconds_to_clock(max_error),
             self._invert_dir, step_cmd_id, dir_cmd_id)
+        
+
     def get_oid(self):
         return self._oid
     def get_step_dist(self):
@@ -88,6 +95,13 @@ class MCU_stepper:
         if mcu_pos >= 0.:
             return int(mcu_pos + 0.5)
         return int(mcu_pos - 0.5)
+    def get_mcu_real_position(self):
+        params = self._get_position_cmd.send_with_response(
+            [self._oid], response='stepper_position', response_oid=self._oid)
+        mcu_pos_dist = params['pos'] * self._step_dist
+        if self._invert_dir:
+            mcu_pos_dist = -mcu_pos_dist
+        return mcu_pos_dist
     def set_stepper_kinematics(self, sk):
         old_sk = self._stepper_kinematics
         self._stepper_kinematics = sk
@@ -797,6 +811,7 @@ class MCU:
             return
         clock = self.print_time_to_clock(print_time)
         if clock < 0:
+            print "nutiu Clock < 0 "
             return
         ret = self._ffi_lib.steppersync_flush(self._steppersync, clock)
         if ret:

@@ -17,7 +17,7 @@ COMPILE_CMD = ("gcc -Wall -g -O2 -shared -fPIC"
 SOURCE_FILES = [
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c',
     'kin_cartesian.c', 'kin_corexy.c', 'kin_delta.c', 'kin_polar.c',
-    'kin_winch.c', 'kin_extruder.c', 'cssl.c', 'pos_decode.c'
+    'kin_winch.c', 'kin_extruder.c', 'spi_mcu_comm.c', 'cssl.c', 'pos_decode.c'
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
@@ -70,8 +70,11 @@ defs_pos_decode = """
     float get_y_pos();
     long get_x_ticks_pos();
     long get_y_ticks_pos();
-    int init_encoder_comm(char* serial_port, int baudrate);
-    void shutdown_encoder();    
+    void zero_axis(char axis);
+"""
+
+defs_spi_mcu_comm = """
+int setup_spi_comm(char* spi_device, uint32_t speed);
 """
 
 defs_kin_cartesian = """
@@ -111,6 +114,8 @@ defs_serialqueue = """
         int len;
         double sent_time, receive_time;
     };
+    void set_mcu_position_adjust_id(uint32_t id);
+    void compensate_poserror(char axis, int steps);
     void init_encoder_poll(struct serialqueue * sq, int encoder_fd);
     struct serialqueue *spiqueue_alloc(char* spi_device, int write_only, uint32_t speed);
     struct serialqueue *get_serialqueue();
@@ -148,7 +153,7 @@ defs_all = [
     defs_pyhelper, defs_serialqueue, defs_std,
     defs_stepcompress, defs_itersolve,
     defs_kin_cartesian, defs_kin_corexy, defs_kin_delta, defs_kin_polar,
-    defs_kin_winch, defs_kin_extruder, defs_pos_decode
+    defs_kin_winch, defs_kin_extruder, defs_pos_decode, defs_spi_mcu_comm
 ]
 
 # Return the list of file modification times

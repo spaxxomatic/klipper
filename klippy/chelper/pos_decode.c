@@ -41,6 +41,16 @@ get_axis_stat(){
     return ret;
 }
 
+void  __visible
+zero_axis(char axis){
+    if (axis == 'X'){
+        X_axis.abs_position = 0;
+    }
+    else if (axis == 'Y'){
+        Y_axis.abs_position = 0;
+    }    
+}
+
 float  __visible
 get_x_pos(){
     return X_axis.position_mm;
@@ -105,7 +115,7 @@ uint16_t* pkt_ptr;
 #define READING_PAYLOAD PAYLOAD_FOLLOWS+1
 #define PAYLOAD_READ_DONE READING_PAYLOAD+1
 
-/* callback function to be called by the cssl on data arrival */
+/* callback function to decode sensor data */
 void receive_position_info(int id, uint8_t *buf, int length)
 {
     //The data format consists of 4 bytes: axis name, upper byte, lower byte, CR
@@ -141,31 +151,3 @@ void receive_position_info(int id, uint8_t *buf, int length)
 
     }
 }
-
-/*
-cssl_t *serial;
-
-int __visible
-init_encoder_comm(char* serial_port, int baudrate){
-    if (cssl_start() != 0){
-        trace_msg(0, "Cannot initialize cssl %s\n",cssl_geterrormsg());
-        return -1;
-    };
-    serial=cssl_open(serial_port,callback,0,baudrate,8,0,1);
-    //serial=cssl_open(serial_port,NULL,0,baudrate,8,0,1);
-    if (!serial) {
-		trace_msg(0, "Cannot setup connection to %s %s\n",serial_port, cssl_geterrormsg());
-        pabort("Pos encoder connection failure");
-		return -1;
-    }
-    trace_msg(2, "Pos encoder conn open on %s at %i baud\n", serial_port, baudrate);
-    return 0;
-}
-
-void  __visible
-shutdown_encoder(){
-    cssl_close(serial);
-    cssl_stop();
-    trace_msg(2, "Pos encoder conn closed\n");
-}
-*/

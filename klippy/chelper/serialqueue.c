@@ -227,26 +227,39 @@ check_message(uint8_t *need_sync, uint8_t *buf, int buf_len)
     if (buf_len < MESSAGE_MIN)
         // Need more data
         return 0;
-    if (*need_sync)
+    if (*need_sync){
+        trace_msg(1, "CM err need syn");
         goto error;
+    };
     uint8_t msglen = buf[MESSAGE_POS_LEN];
-    if (msglen < MESSAGE_MIN || msglen > MESSAGE_MAX)
+    if (msglen < MESSAGE_MIN || msglen > MESSAGE_MAX){
+        trace_msg(1,"CM err msg len %i should be between %i and %i ", msglen, MESSAGE_MIN, MESSAGE_MAX);
         goto error;
+    }
+        
     uint8_t msgseq = buf[MESSAGE_POS_SEQ];
-    if ((msgseq & ~MESSAGE_SEQ_MASK) != MESSAGE_DEST)
-        goto error;
+    if ((msgseq & ~MESSAGE_SEQ_MASK) != MESSAGE_DEST){
+        trace_msg(1,"CM err destination is %i but should be %i ", msgseq & ~MESSAGE_SEQ_MASK, MESSAGE_DEST);
+        //goto error;
+    }
     if (buf_len < msglen)
         // Need more data
         return 0;
-    if (buf[msglen-MESSAGE_TRAILER_SYNC] != MESSAGE_SYNC)
+    if (buf[msglen-MESSAGE_TRAILER_SYNC] != MESSAGE_SYNC){
+        trace_msg(1,"CM err not sync at end");
         goto error;
+    }    
     uint16_t msgcrc = ((buf[msglen-MESSAGE_TRAILER_CRC] << 8)
                        | (uint8_t)buf[msglen-MESSAGE_TRAILER_CRC+1]);
     uint16_t crc = crc16_ccitt(buf, msglen-MESSAGE_TRAILER_SIZE);
-    if (crc != msgcrc)
+    if (crc != msgcrc){
+        trace_msg(1,"CM crc err");    
         goto error;
+    }
+    //trace_buffer("CM ", buf, buf_len);
     return msglen;
 error: ;
+    trace_buffer("CM err", (char*) buf, buf_len);
     // Discard bytes until next SYNC found
     uint8_t *next_sync = memchr(buf, MESSAGE_SYNC, buf_len);
     if (next_sync) {
@@ -527,12 +540,14 @@ handle_message(struct serialqueue *sq, double eventtime, int len)
     }
     if (len == MESSAGE_MIN) {
         // Ack/nak message
-        if (sq->last_ack_seq < rseq)
+        if (sq->last_ack_seq < rseq){
             sq->last_ack_seq = rseq;
-        else if (rseq > sq->ignore_nak_seq && !list_empty(&sq->sent_queue))
-            // Duplicate Ack is a Nak - do fast retransmit
+            //trace_msg(1, "ack rseq %i", rseq);
+        }else if (rseq > sq->ignore_nak_seq && !list_empty(&sq->sent_queue)){
+                // Duplicate Ack is a Nak - do fast retransmit
             trace_msg(1, "nak retry\n");
             pollreactor_update_timer(&sq->pr, SQPT_RETRANSMIT, PR_NOW);
+        }
     }
 
     if (len > MESSAGE_MIN) {
@@ -559,11 +574,13 @@ input_event(struct serialqueue *sq, double eventtime)
         return;
     }
     sq->input_pos += ret;
+    
     for (;;) {
         ret = check_message(&sq->need_sync, sq->input_buf, sq->input_pos);
-        if (!ret)
+        if (!ret){
             // Need more data
             return;
+            }
         if (ret > 0) {
             // Received a valid message
             pthread_mutex_lock(&sq->lock);
@@ -828,12 +845,14 @@ position_change_event(struct serialqueue *sq, double eventtime)
     int ret = read(sq->encoder_fd,pos_buff, sizeof(pos_buff));
     if (ret <= 0) {
         report_errno("Read pos", ret);
-        pollreactor_do_exit(&sq->pr);
+        int val = fcntl(sq->encoder_fd, F_GETFL, 0);
+        printf("file status = 0x%x\n", val);        
+        //pollreactor_do_exit(&sq->pr);
         return;
     } 
     //trace_buffer("POS", pos_buff, ret);
     receive_position_info(0,  (uint8_t*) pos_buff, ret);
-    trace_msg(2, "POS x%0.3f y%0.3f ", get_x_pos(), get_y_pos());
+    //trace_msg(2, "POS x%0.3f y%0.3f ", get_x_pos(), get_y_pos());
     //trace_msg(1, "POS x %i y %i \n", get_x_ticks_pos(), get_y_ticks_pos());
 }
 
@@ -1163,3 +1182,69 @@ serialqueue_extract_old(struct serialqueue *sq, int sentq
     }
     return pos;
 }
+
+
+uint32_t mcu_position_adjust_id;
+void __visible set_mcu_position_adjust_id(uint32_t id){
+    mcu_position_adjust_id = id;
+}
+
+uint8_t get_oid_of_axis_stepper(char axis){
+    if (axis == 'X') return 0;
+    else if (axis == 'Y') return 1;
+    trace_msg(0,"Invalid axis %c", axis);
+    pabort("Fatal exception");
+    return -1;
+}
+
+void __visible compensate_poserror(char axis, int steps){
+    #define POSITION_ADJUST_MSG_LEN 3
+    
+    uint8_t oid = get_oid_of_axis_stepper(axis);
+    uint16_t pos_delta = 400;
+    uint8_t delta_positive = 1;
+    uint8_t msg;
+    while(pos_delta > 31){
+            uint8_t send_delta = 31;
+            msg = oid<<6 || delta_positive<<5 || send_delta;
+            spi_sendbyte(&send_delta, 1);
+            pos_delta -= send_delta;
+    }
+    if (pos_delta > 0){
+        uint8_t send_delta = pos_delta;
+        msg = oid<<6 || delta_positive<<5 || pos_delta;
+        spi_sendbyte(&send_delta, 1);
+    }
+
+}
+    
+    /*
+    uint32_t msg[POSITION_ADJUST_MSG_LEN] = {
+            mcu_position_adjust_id, oid, steps
+    };
+    
+    struct queue_message *out = message_alloc();
+    out->len = MESSAGE_HEADER_SIZE;
+    
+    memcpy(&out->msg[out->len], msg, 3);
+    out->len += POSITION_ADJUST_MSG_LEN;
+    
+    // Fill header / trailer
+    out->len += MESSAGE_TRAILER_SIZE;
+    out->msg[MESSAGE_POS_LEN] = out->len;
+    out->msg[MESSAGE_POS_SEQ] = (MESSAGE_DEST
+                                 | ((p_serialqueue->send_seq) & MESSAGE_SEQ_MASK));
+    uint16_t crc = crc16_ccitt(out->msg, out->len - MESSAGE_TRAILER_SIZE);
+    out->msg[out->len - MESSAGE_TRAILER_CRC] = crc >> 8;
+    out->msg[out->len - MESSAGE_TRAILER_CRC+1] = crc & 0xff;
+    out->msg[out->len - MESSAGE_TRAILER_SYNC] = MESSAGE_SYNC;
+
+    // Send message
+    trace_msg(3, "POS ADJ %c oid %i steps %i", axis, oid, steps);
+    trace_buffer("PADJ", (char *) out->msg, out->len);
+    int ret = write(p_serialqueue->serial_fd, out->msg, out->len);
+    if (ret < 0)
+        report_errno("write", ret);
+    //p_serialqueue->send_seq++;
+    message_free(out);
+    */

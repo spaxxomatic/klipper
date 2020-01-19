@@ -235,6 +235,7 @@ stepcompress_alloc(uint32_t oid)
     list_init(&sc->msg_queue);
     sc->oid = oid;
     sc->sdir = -1;
+    printf("stepcompress_alloc oid %i\n", oid);
     return sc;
 }
 
@@ -269,7 +270,8 @@ stepcompress_flush(struct stepcompress *sc, uint64_t move_clock)
         return 0;
     while (sc->last_step_clock < move_clock) {
         struct step_move move = compress_bisect_add(sc);
-        //nutiu printf("MOVE INT %i CNT %i ADD %i\n", move.interval, move.count, move.add);
+        //nutiu 
+        printf("LN MOVE INT %i CNT %i ADD %i\n", move.interval, move.count, move.add);
         int ret = check_line(sc, move);
         if (ret)
             return ret;
@@ -408,7 +410,7 @@ queue_append_finish(struct queue_append qa)
 
 // Slow path for queue_append()
 static int
-queue_append_slow(struct stepcompress *sc, double rel_sc)
+queue_append_slow(struct stepcompress *sc, double rel_sc) //nutiu was ist rel_sc ?
 {
     uint64_t abs_step_clock = (uint64_t)rel_sc + sc->last_step_clock;
     if (abs_step_clock >= sc->last_step_clock + CLOCK_DIFF_MAX) {
@@ -459,6 +461,7 @@ inline int
 queue_append(struct queue_append *qa, double step_clock)
 {
     double rel_sc = step_clock + qa->clock_offset;
+    
     if (likely(!(qa->qnext >= qa->qend || rel_sc >= (double)CLOCK_DIFF_MAX))) {
         *qa->qnext++ = qa->last_step_clock_32 + (uint32_t)rel_sc;
         return 0;
@@ -635,7 +638,10 @@ steppersync_flush(struct steppersync *ss, uint64_t move_clock)
     }
 
     // Transmit commands
-    if (!list_empty(&msgs))
+    if (!list_empty(&msgs)){
+        //struct queue_message *m =  msgs.root;
+        
         serialqueue_send_batch(ss->sq, ss->cq, &msgs);
+    }
     return 0;
 }

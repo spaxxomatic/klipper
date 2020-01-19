@@ -1,4 +1,10 @@
 The spidev module is built into the kernel proper (kernel7.img), so you have to set the module parameter on the kernel command line.
 Add to /boot/cmdline.txt:
-
 spidev.bufsiz=32768
+
+-- gcome commands added:
+set_zero_pos
+get_position
+..
+
+-- start param added: -t <level> -> trace mcu command

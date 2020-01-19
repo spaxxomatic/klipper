@@ -10,6 +10,7 @@
 #include "internal.h" // GPIO
 #include "pgm.h" // READP
 #include "sched.h" // sched_shutdown
+#include "stepper.h" // command_position_adjust
 
 DECL_ENUMERATION("spi_bus", "spi", 0);
 
@@ -29,78 +30,30 @@ static const uint8_t SCK = GPIO('B', 1), SS = GPIO('B', 0);
 DECL_CONSTANT_STR("BUS_PINS_spi", "PB3,PB2,PB1");
 #endif
 
-static void
+static const uint8_t TX_REQ_PIN = GPIO('B', 1);
+struct gpio_out tx_req_pin;
+
+void
 spi_init(void)
 {
-    if (!(GPIO2REGS(SS)->mode & GPIO2BIT(SS)))
-        // The SS pin must be an output pin (but is otherwise unused)
-        gpio_out_setup(SS, 0);
-    gpio_out_setup(SCK, 0);
-    gpio_out_setup(MOSI, 0);
-    gpio_in_setup(MISO, 0);
+  //setup spi as slave
+  //gpio_out_setup(SS, 0);
+  gpio_in_setup(SCK, 0);
+  gpio_in_setup(MOSI, 0);
+  gpio_out_setup(MISO, 0);      
 
-    SPCR = (1<<MSTR) | (1<<SPE);
-    SPSR = 0;
+  SPCR=(1<<SPE)|(1<<SPIE);  // Turn on SPI in Slave Mode, turn on interrupt
+  //tx_req_pin = gpio_out_setup(TX_REQ_PIN, 0);      
 }
+DECL_INIT(spi_init);
 
-struct spi_config
-spi_setup(uint32_t bus, uint8_t mode, uint32_t rate)
-{
-    if (bus)
-        shutdown("Invalid spi_setup parameters");
-
-    // Make sure the SPI interface is enabled
-    spi_init();
-
-    // Setup rate
-    struct spi_config config = {0, 0};
-    if (rate >= (CONFIG_CLOCK_FREQ / 2)) {
-        config.spsr = (1<<SPI2X);
-    } else if (rate >= (CONFIG_CLOCK_FREQ / 4)) {
-        config.spcr = 0;
-    } else if (rate >= (CONFIG_CLOCK_FREQ / 8)) {
-        config.spcr = 1;
-        config.spsr = (1<<SPI2X);
-    } else if (rate >= (CONFIG_CLOCK_FREQ / 16)) {
-        config.spcr = 1;
-    } else if (rate >= (CONFIG_CLOCK_FREQ / 32)) {
-        config.spcr = 2;
-        config.spsr = (1<<SPI2X);
-    } else if (rate >= (CONFIG_CLOCK_FREQ / 64)) {
-        config.spcr = 2;
-    } else {
-        config.spcr = 3;
-    }
-
-    // Setup mode
-    config.spcr |= (1<<SPE) | (1<<MSTR) | (mode << CPHA);
-
-    return config;
-}
-
-void
-spi_prepare(struct spi_config config)
-{
-    SPCR = config.spcr;
-    SPSR = config.spsr;
-}
-
-void
-spi_transfer(struct spi_config config, uint8_t receive_data
-             , uint8_t len, uint8_t *data)
-{
-    if (receive_data) {
-        while (len--) {
-            SPDR = *data;
-            while (!(SPSR & (1<<SPIF)))
-                ;
-            *data++ = SPDR;
-        }
-    } else {
-        while (len--) {
-            SPDR = *data++;
-            while (!(SPSR & (1<<SPIF)))
-                ;
-        }
-    }
+// Ths spi interface is used to receive the actual position information from the linear encoders
+ISR (SPI_STC_vect)
+{  
+    //the first two bits endcode the OID (0 to 4)
+    //the rest of 6 bits are the delta information
+    uint8_t oid = SPDR>>6;
+    int8_t pos_delta = SPDR&0x3f;
+    command_position_adjust(oid, pos_delta);
+    SPDR = MESSAGE_SYNC;
 }

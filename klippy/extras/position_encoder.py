@@ -19,6 +19,8 @@ class PositionFeedback:
         self.printer = config.get_printer()
         self.encoder_serial_port = config.get('encoder_serial_port')
         self.scales_baud = config.getint('encoder_baud')
+        self.spi_device = config.get('spi_device')
+        self.spi_freq = config.getint('spi_freq')
         self.printer.register_event_handler("klippy:ready", self.connect)
         self.printer.register_event_handler("klippy:disconnect", self.disconnect)
         self.scales_fd = None        
@@ -41,7 +43,7 @@ class PositionFeedback:
             time.sleep(2)
     def connect(self):
         # Initial connection
-        logging.info("Connecting encoders")
+        logging.info("Opening encoder connection")
         try:
             self.scales_fd = serial.Serial(
                 self.encoder_serial_port, self.scales_baud, timeout=0, exclusive=True)
@@ -51,6 +53,9 @@ class PositionFeedback:
             logging.error("Unable to connect encoder via port %s:"%self.encoder_serial_port ,e)
         self.serialqueue = self.ffi_lib.get_serialqueue()
         self.ffi_lib.init_encoder_poll(self.serialqueue, self.scales_fd.fileno())
+        logging.info("Opening SPI connection")
+        if (self.ffi_lib.setup_spi_comm(self.spi_device, self.spi_freq) <= 0):
+            logging.error("Unable to open SPI device %s:"%self.spi_device)
         return self.scales_fd
 
         

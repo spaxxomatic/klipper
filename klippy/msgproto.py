@@ -360,6 +360,7 @@ class MessageParser:
                 self.messages_by_id[msgid] = OutputFormat(msgid, msgformat)
                 continue
             msg = MessageFormat(msgid, msgformat, self.enumerations)
+            #print ("Nutiu %s %s "%(msgid, msgformat))
             self.messages_by_id[msgid] = msg
             self.messages_by_name[msg.name] = msg
     def process_identify(self, data, decompress=True):

@@ -478,7 +478,8 @@ class GCodeParser:
         'SET_GCODE_OFFSET', 'M206', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE',
         'M105', 'M104', 'M109', 'M140', 'M190', 'M106', 'M107',
         'M112', 'M115', 'IGNORE', 'GET_POSITION',
-        'RESTART', 'FIRMWARE_RESTART', 'ECHO', 'STATUS', 'HELP', 'TRACE_COMM']
+        'RESTART', 'FIRMWARE_RESTART', 'ECHO', 'STATUS', 'HELP', 
+        'TRACE_COMM','ZERO_X', 'ZERO_Y', 'COMP'] #nutiu
     # G-Code movement commands
     cmd_G1_aliases = ['G0']
     def cmd_G1(self, params):
@@ -699,6 +700,8 @@ class GCodeParser:
         steppers = kin.get_steppers()
         mcu_pos = " ".join(["%s:%d" % (s.get_name(), s.get_mcu_position())
                             for s in steppers])
+        mcu_real_pos = " ".join(["%s:%.4f" % (s.get_name(), s.get_mcu_real_position())
+                            for s in steppers])                            
         stepper_pos = " ".join(
             ["%s:%.6f" % (s.get_name(), s.get_commanded_position())
              for s in steppers])
@@ -706,22 +709,25 @@ class GCodeParser:
                                   for a, v in zip("XYZE", kin.calc_position())])
         toolhead_pos = " ".join(["%s:%.6f" % (a, v) for a, v in zip(
             "XYZE", self.toolhead.get_position())])
-        gcode_pos = " ".join(["%s:%.6f"  % (a, v)
-                              for a, v in zip("XYZE", self.last_position)])
-        base_pos = " ".join(["%s:%.6f"  % (a, v)
-                             for a, v in zip("XYZE", self.base_position)])
-        homing_pos = " ".join(["%s:%.6f"  % (a, v)
-                               for a, v in zip("XYZ", self.homing_position)])
+        #gcode_pos = " ".join(["%s:%.6f"  % (a, v)
+        #                      for a, v in zip("XYZE", self.last_position)])
+        #base_pos = " ".join(["%s:%.6f"  % (a, v)
+        #                     for a, v in zip("XYZE", self.base_position)])
+        #homing_pos = " ".join(["%s:%.6f"  % (a, v)
+        #                       for a, v in zip("XYZ", self.homing_position)])
         self.respond_info(
-            "mcu: %s\n"
+            "mcu_calculated: %s\n"
+            "mcu_real: %s\n"
             "stepper: %s\n"
             "kinematic: %s\n"
             "toolhead: %s\n"
-            "gcode: %s\n"
-            "gcode base: %s\n"
-            "gcode homing: %s" % (
-                mcu_pos, stepper_pos, kinematic_pos, toolhead_pos,
-                gcode_pos, base_pos, homing_pos))
+            #"gcode: %s\n"
+            #"gcode base: %s\n"
+            #"gcode homing: %s" 
+            % (
+                mcu_pos, mcu_real_pos, stepper_pos, kinematic_pos, toolhead_pos,
+            #    gcode_pos, base_pos, homing_pos
+                ))
     def request_restart(self, result):
         if self.is_printer_ready:
             print_time = self.toolhead.get_last_move_time()
@@ -740,12 +746,28 @@ class GCodeParser:
     cmd_ECHO_when_not_ready = True
     def cmd_ECHO(self, params):
         self.respond_info(params['#original'], log=False)
-    cmd_TRACE_COMM_when_not_ready = True
+    
+    cmd_TRACE_COMM_when_not_ready = True #nutiu
     cmd_TRACE_COMM_help = "Enable MCU communication trace"
     def cmd_TRACE_COMM(self, params):
         trace_level = self.get_int('L', params, 0)
         self.ffi_lib.set_trace_level(trace_level)
         self.respond_info("Trace level set to %i"%trace_level)
+    cmd_COMP_help = "Adjust pos (simulate position error)"
+    def cmd_COMP(self, params):
+        x_adj = self.get_int('X', params, 0)
+        y_adj = self.get_int('Y', params, 0)
+        if (x_adj != 0): self.ffi_lib.compensate_poserror('X', x_adj)
+        if (y_adj != 0): self.ffi_lib.compensate_poserror('Y', y_adj)
+        self.respond_info("Set adj X %i Y %i"%(x_adj, y_adj))
+    cmd_ZERO_X_help = "Zero X axis position"
+    def cmd_ZERO_X(self, params):
+        self.ffi_lib.zero_axis('X')
+        self.respond_info("OK")
+    cmd_ZERO_Y_help = "Zero X axis position"
+    def cmd_ZERO_Y(self, params):
+        self.ffi_lib.zero_axis('Y')
+        self.respond_info("OK")        
     cmd_STATUS_when_not_ready = True
     cmd_STATUS_help = "Report the printer status"
     def cmd_STATUS(self, params):

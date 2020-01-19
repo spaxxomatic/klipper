@@ -214,6 +214,7 @@ class SerialRetryCommand:
         first_query_time = query_time = max(self.min_query_time, minsystime)
         while 1:
             for cmd in cmds:
+                #print "Raw send " + str(cmd)
                 self.serial.raw_send(cmd, minclock, minclock, cmd_queue)
             params = self.completion.wait(query_time + self.RETRY_TIME)
             if params is not None:
@@ -244,6 +245,7 @@ def stk500v2_leave(ser, reactor):
 
 # Attempt an arduino style reset on a serial port
 def arduino_reset(serialport, reactor):
+    logging.debug("Arduino reset")
     # First try opening the port at a different baud
     ser = serial.Serial(serialport, 2400, timeout=0, exclusive=True)
     ser.read(1)

@@ -67,5 +67,5 @@ void serialqueue_set_clock_est(struct serialqueue *sq, double est_freq
 void serialqueue_get_stats(struct serialqueue *sq, char *buf, int len);
 int serialqueue_extract_old(struct serialqueue *sq, int sentq
                             , struct pull_queue_message *q, int max);
-
+void set_mcu_position_adjust_id(uint32_t id);
 #endif // serialqueue.h

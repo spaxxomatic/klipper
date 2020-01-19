@@ -34,6 +34,7 @@ struct stepper {
     struct timer time;
     uint32_t interval;
     int16_t add;
+    int16_t pos_error_count;
 #if CONFIG_STEP_DELAY <= 0
     uint_fast16_t count;
 #define next_step_time time.waketime
@@ -72,25 +73,9 @@ stepper_load_next(struct stepper *s, uint32_t min_next_time)
     s->next_step_time += m->interval;
     s->add = m->add;
     s->interval = m->interval + m->add;
-    if (CONFIG_STEP_DELAY <= 0) {
-        if (CONFIG_MACH_AVR)
-            // On AVR see if the add can be optimized away
-            s->flags = m->add ? s->flags|SF_HAVE_ADD : s->flags & ~SF_HAVE_ADD;
-        s->count = m->count;
-    } else {
-        // On faster mcus, it is necessary to schedule unstep events
-        // and so there are twice as many events.  Also check that the
-        // next step event isn't too close to the last unstep.
-        if (unlikely(timer_is_before(s->next_step_time, min_next_time))) {
-            if ((int32_t)(s->next_step_time - min_next_time)
-                < (int32_t)(-timer_from_us(1000)))
-                shutdown("Stepper too far in past");
-            s->time.waketime = min_next_time;
-        } else {
-            s->time.waketime = s->next_step_time;
-        }
-        s->count = (uint32_t)m->count * 2;
-    }
+    // On AVR see if the add can be optimized away
+    s->flags = m->add ? s->flags|SF_HAVE_ADD : s->flags & ~SF_HAVE_ADD;
+    s->count = m->count;
     if (m->flags & MF_DIR) {
         s->position = -s->position + m->count;
         gpio_out_toggle_noirq(s->dir_pin);
@@ -103,11 +88,14 @@ stepper_load_next(struct stepper *s, uint32_t min_next_time)
     return SF_RESCHEDULE;
 }
 
-// AVR optimized step function
-static uint_fast8_t
-stepper_event_avr(struct stepper *s)
+// Timer callback - step the given stepper.
+uint_fast8_t
+stepper_event(struct timer *t)
 {
+    struct stepper *s = container_of(t, struct stepper, time);
+    // AVR optimized step function
     gpio_out_toggle_noirq(s->step_pin);
+
     uint_fast16_t count = s->count - 1;
     if (likely(count)) {
         s->count = count;
@@ -122,68 +110,16 @@ stepper_event_avr(struct stepper *s)
     return ret;
 }
 
-// Optimized step function for stepping and unstepping in same function
-static uint_fast8_t
-stepper_event_nodelay(struct stepper *s)
-{
-    gpio_out_toggle_noirq(s->step_pin);
-    uint_fast16_t count = s->count - 1;
-    if (likely(count)) {
-        s->count = count;
-        s->time.waketime += s->interval;
-        s->interval += s->add;
-        gpio_out_toggle_noirq(s->step_pin);
-        return SF_RESCHEDULE;
-    }
-    uint_fast8_t ret = stepper_load_next(s, 0);
-    gpio_out_toggle_noirq(s->step_pin);
-    return ret;
-}
-
-// Timer callback - step the given stepper.
-uint_fast8_t
-stepper_event(struct timer *t)
-{
-    struct stepper *s = container_of(t, struct stepper, time);
-    if (CONFIG_STEP_DELAY <= 0 && CONFIG_MACH_AVR)
-        return stepper_event_avr(s);
-    if (CONFIG_STEP_DELAY <= 0)
-        return stepper_event_nodelay(s);
-
-    // Normal step code - schedule the unstep event
-    uint32_t step_delay = timer_from_us(CONFIG_STEP_DELAY);
-    uint32_t min_next_time = timer_read_time() + step_delay;
-    gpio_out_toggle_noirq(s->step_pin);
-    s->count--;
-    if (likely(s->count & 1))
-        // Schedule unstep event
-        goto reschedule_min;
-    if (likely(s->count)) {
-        s->next_step_time += s->interval;
-        s->interval += s->add;
-        if (unlikely(timer_is_before(s->next_step_time, min_next_time)))
-            // The next step event is too close - push it back
-            goto reschedule_min;
-        s->time.waketime = s->next_step_time;
-        return SF_RESCHEDULE;
-    }
-    return stepper_load_next(s, min_next_time);
-reschedule_min:
-    s->time.waketime = min_next_time;
-    return SF_RESCHEDULE;
-}
-
 void
 command_config_stepper(uint32_t *args)
 {
     struct stepper *s = oid_alloc(args[0], command_config_stepper, sizeof(*s));
-    if (!CONFIG_INLINE_STEPPER_HACK)
-        s->time.func = stepper_event;
     s->flags = args[4] ? SF_INVERT_STEP : 0;
     s->step_pin = gpio_out_setup(args[1], s->flags & SF_INVERT_STEP);
     s->dir_pin = gpio_out_setup(args[2], 0);
     s->min_stop_interval = args[3];
     s->position = -POSITION_BIAS;
+    s->pos_error_count = 0;
     move_request_size(sizeof(struct stepper_move));
 }
 DECL_COMMAND(command_config_stepper,
@@ -274,10 +210,7 @@ static uint32_t
 stepper_get_position(struct stepper *s)
 {
     uint32_t position = s->position;
-    if (CONFIG_STEP_DELAY <= 0)
-        position -= s->count;
-    else
-        position -= s->count / 2;
+    position -= s->count;
     if (position & 0x80000000)
         return -position;
     return position;
@@ -326,3 +259,21 @@ stepper_shutdown(void)
     }
 }
 DECL_SHUTDOWN(stepper_shutdown);
+
+
+void
+command_position_adjust(uint8_t oid, int8_t steps)
+{
+    return;
+    //stepper_stop(stepper_oid_lookup(0));
+    //stepper_stop(stepper_oid_lookup(1));
+    //struct stepper *s = stepper_oid_lookup(args[0]);
+    struct stepper *s = stepper_oid_lookup(oid);
+    s->pos_error_count = steps;
+    s->count += steps; 
+    s->position += steps;
+    //if (s->pos_error_count) { //nutiu position error compensation
+    //    s->count += s->pos_error_count; //might be crude, but maybe we can smooth it on MCU side
+    //    s->pos_error_count = 0;
+    //}
+}
