@@ -4,7 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import math, logging, importlib
-import mcu, homing, chelper, kinematics.extruder
+import mcu, homing, chelper
 
 # Common suffixes: _d is distance (in mm), _v is velocity (in
 #   mm/second), _v2 is velocity squared (mm^2/s^2), _t is time (in
@@ -51,8 +51,6 @@ class Move:
     def calc_junction(self, prev_move):
         if not self.is_kinematic_move or not prev_move.is_kinematic_move:
             return
-        # Allow extruder to calculate its maximum junction
-        extruder_v2 = self.toolhead.extruder.calc_junction(prev_move, self)
         # Find max velocity using "approximated centripetal velocity"
         axes_d = self.axes_d
         prev_axes_d = prev_move.axes_d
@@ -73,7 +71,7 @@ class Move:
         self.max_start_v2 = min(
             R * self.accel, R * prev_move.accel,
             move_centripetal_v2, prev_move_centripetal_v2,
-            extruder_v2, self.max_cruise_v2, prev_move.max_cruise_v2,
+            self.max_cruise_v2, prev_move.max_cruise_v2,
             prev_move.max_start_v2 + prev_move.delta_v2)
         self.max_smoothed_v2 = min(
             self.max_start_v2
@@ -104,8 +102,8 @@ class Move:
                 self.axes_d[0], self.axes_d[1], self.axes_d[2],
                 self.start_v, self.cruise_v, self.accel)
             self.toolhead.kin.move(next_move_time, self)
-        if self.axes_d[3]:
-            self.toolhead.extruder.move(next_move_time, self)
+        #if self.axes_d[3]:
+        #    self.toolhead.extruder.move(next_move_time, self)
         self.toolhead.update_move_time(
             self.accel_t + self.cruise_t + self.decel_t)
 
@@ -115,7 +113,7 @@ LOOKAHEAD_FLUSH_TIME = 0.250
 # "look-ahead" across moves to reduce acceleration between moves.
 class MoveQueue:
     def __init__(self):
-        self.extruder_lookahead = None
+        #self.extruder_lookahead = None
         self.queue = []
         self.leftover = 0
         self.junction_flush = LOOKAHEAD_FLUSH_TIME
@@ -125,8 +123,8 @@ class MoveQueue:
         self.junction_flush = LOOKAHEAD_FLUSH_TIME
     def set_flush_time(self, flush_time):
         self.junction_flush = flush_time
-    def set_extruder(self, extruder):
-        self.extruder_lookahead = extruder.lookahead
+    #def set_extruder(self, extruder):
+    #    self.extruder_lookahead = extruder.lookahead
     def flush(self, lazy=False):
         self.junction_flush = LOOKAHEAD_FLUSH_TIME
         update_flush_count = lazy
@@ -175,14 +173,20 @@ class MoveQueue:
             next_smoothed_v2 = smoothed_v2
         if update_flush_count:
             return
-        # Allow extruder to do its lookahead
-        move_count = self.extruder_lookahead(queue, flush_count, lazy)
+        #nutiu removing extruder
+        ## Allow extruder to do its lookahead
+        #move_count = self.extruder_lookahead(queue, flush_count, lazy)
         # Generate step times for all moves ready to be flushed
-        for move in queue[:move_count]:
-            move.move()
-        # Remove processed moves from the queue
-        self.leftover = flush_count - move_count
-        del queue[:move_count]
+        #for move in queue[:move_count]:
+        #    move.move()
+        ## Remove processed moves from the queue
+        #self.leftover = flush_count - move_count
+        #del queue[:move_count]
+        
+        #nutiu without extruder
+        for move in queue:
+            move.move()  
+
     def add_move(self, move):
         self.queue.append(move)
         if len(self.queue) == 1:
@@ -250,8 +254,8 @@ class ToolHead:
         self.cmove = ffi_main.gc(ffi_lib.move_alloc(), ffi_lib.free)
         self.move_fill = ffi_lib.move_fill
         # Create kinematics class
-        self.extruder = kinematics.extruder.DummyExtruder()
-        self.move_queue.set_extruder(self.extruder)
+        #self.extruder = kinematics.extruder.DummyExtruder()
+        #self.move_queue.set_extruder(self.extruder)
         kin_name = config.get('kinematics')
         try:
             mod = importlib.import_module('kinematics.' + kin_name)
@@ -384,8 +388,8 @@ class ToolHead:
             return
         if move.is_kinematic_move:
             self.kin.check_move(move)
-        if move.axes_d[3]:
-            self.extruder.check_move(move)
+        #if move.axes_d[3]:
+        #    self.extruder.check_move(move)
         self.commanded_pos[:] = move.end_pos
         self.move_queue.add_move(move)
         if self.print_time > self.need_check_stall:
@@ -398,8 +402,8 @@ class ToolHead:
         self.dwell(STALL_TIME)
         last_move_time = self.get_last_move_time()
         self.kin.motor_off(last_move_time)
-        for ext in kinematics.extruder.get_printer_extruders(self.printer):
-            ext.motor_off(last_move_time)
+        #for ext in kinematics.extruder.get_printer_extruders(self.printer):
+        #    ext.motor_off(last_move_time)
         self.printer.send_event("toolhead:motor_off", last_move_time)
         self.dwell(STALL_TIME)
         logging.debug('; Max time of %f', last_move_time)
@@ -411,15 +415,15 @@ class ToolHead:
         while (not self.special_queuing_state
                or self.print_time >= self.mcu.estimated_print_time(eventtime)):
             eventtime = self.reactor.pause(eventtime + 0.100)
-    def set_extruder(self, extruder):
-        last_move_time = self.get_last_move_time()
-        self.extruder.set_active(last_move_time, False)
-        extrude_pos = extruder.set_active(last_move_time, True)
-        self.extruder = extruder
-        self.move_queue.set_extruder(extruder)
-        self.commanded_pos[3] = extrude_pos
-    def get_extruder(self):
-        return self.extruder
+    #def set_extruder(self, extruder):
+    #    last_move_time = self.get_last_move_time()
+    #    self.extruder.set_active(last_move_time, False)
+    #    extrude_pos = extruder.set_active(last_move_time, True)
+    #    self.extruder = extruder
+    #    self.move_queue.set_extruder(extruder)
+    #    self.commanded_pos[3] = extrude_pos
+    #def get_extruder(self):
+    #    return self.extruder
     def drip_move(self, newpos, speed):
         # Validate move
         move = Move(self, self.commanded_pos, newpos, speed)
@@ -546,4 +550,4 @@ class ToolHead:
 
 def add_printer_objects(config):
     config.get_printer().add_object('toolhead', ToolHead(config))
-    kinematics.extruder.add_printer_objects(config)
+    #kinematics.extruder.add_printer_objects(config)

@@ -4,7 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os, re, logging, collections, shlex, chelper
-import homing, kinematics.extruder
+import homing
 
 # Parse and handle G-Code commands
 class GCodeParser:
@@ -172,10 +172,6 @@ class GCodeParser:
         if self.move_transform is None:
             self.move_with_transform = self.toolhead.move
             self.position_with_transform = self.toolhead.get_position
-        extruders = kinematics.extruder.get_printer_extruders(self.printer)
-        if extruders:
-            self.extruder = extruders[0]
-            self.toolhead.set_extruder(self.extruder)
         self.fan = self.printer.lookup_object('fan', None)
         if self.is_fileinput and self.fd_handle is None:
             self.fd_handle = self.reactor.register_fd(self.fd,
@@ -390,44 +386,6 @@ class GCodeParser:
         if not out:
             return "T:0"
         return " ".join(out)
-    def bg_temp(self, heater):
-        if self.is_fileinput:
-            return
-        eventtime = self.reactor.monotonic()
-        while self.is_printer_ready and heater.check_busy(eventtime):
-            print_time = self.toolhead.get_last_move_time()
-            self.respond(self._get_temp(eventtime))
-            eventtime = self.reactor.pause(eventtime + 1.)
-    def _set_temp(self, params, is_bed=False, wait=False):
-        temp = self.get_float('S', params, 0.)
-        heater = None
-        if is_bed:
-            heater = self.printer.lookup_object('heater_bed', None)
-        elif 'T' in params:
-            index = self.get_int('T', params, minval=0)
-            extruder = self.printer.lookup_object('extruder%d' % (index,), None)
-            if extruder is not None:
-                heater = extruder.get_heater()
-        elif self.extruder is not None:
-            heater = self.extruder.get_heater()
-        if heater is None:
-            if temp > 0.:
-                self.respond_error("Heater not configured")
-            return
-        print_time = self.toolhead.get_last_move_time()
-        try:
-            heater.set_temp(print_time, temp)
-        except heater.error as e:
-            raise self.error(str(e))
-        if wait and temp:
-            self.bg_temp(heater)
-    def _set_fan_speed(self, speed):
-        if self.fan is None:
-            if speed and not self.is_fileinput:
-                self.respond_info("Fan not configured")
-            return
-        print_time = self.toolhead.get_last_move_time()
-        self.fan.set_speed(print_time, speed)
     # G-Code special command handlers
     def cmd_default(self, params):
         if not self.is_printer_ready:
@@ -448,20 +406,6 @@ class GCodeParser:
                 handler(params)
                 return
         self.respond_info('Unknown command:"%s"' % (cmd,))
-    def cmd_Tn(self, params):
-        # Select Tool
-        extruders = kinematics.extruder.get_printer_extruders(self.printer)
-        index = self.get_int('T', params, minval=0, maxval=len(extruders)-1)
-        e = extruders[index]
-        if self.extruder is e:
-            return
-        self.run_script_from_command(self.extruder.get_activate_gcode(False))
-        self.toolhead.set_extruder(e)
-        self.extruder = e
-        self.reset_last_position()
-        self.extrude_factor = 1.
-        self.base_position[3] = self.last_position[3]
-        self.run_script_from_command(self.extruder.get_activate_gcode(True))
     def _cmd_mux(self, params):
         key, values = self.mux_commands[params['#command']]
         if None in values:
@@ -476,7 +420,6 @@ class GCodeParser:
         'G1', 'G4', 'G28', 'M18', 'M400',
         'G20', 'M82', 'M83', 'G90', 'G91', 'G92', 'M114', 'M220', 'M221',
         'SET_GCODE_OFFSET', 'M206', 'SAVE_GCODE_STATE', 'RESTORE_GCODE_STATE',
-        'M105', 'M104', 'M109', 'M140', 'M190', 'M106', 'M107',
         'M112', 'M115', 'IGNORE', 'GET_POSITION',
         'RESTART', 'FIRMWARE_RESTART', 'ECHO', 'STATUS', 'HELP', 
         'TRACE_COMM','ZERO_X', 'ZERO_Y', 'COMP'] #nutiu
@@ -648,33 +591,7 @@ class GCodeParser:
             speed = self.get_float('MOVE_SPEED', params, self.speed, above=0.)
             self.last_position[:3] = state['last_position'][:3]
             self.move_with_transform(self.last_position, speed)
-    # G-Code temperature and fan commands
-    cmd_M105_when_not_ready = True
-    def cmd_M105(self, params):
-        # Get Extruder Temperature
-        msg = self._get_temp(self.reactor.monotonic())
-        if self.need_ack:
-            self.ack(msg)
-        else:
-            self.respond(msg)
-    def cmd_M104(self, params):
-        # Set Extruder Temperature
-        self._set_temp(params)
-    def cmd_M109(self, params):
-        # Set Extruder Temperature and Wait
-        self._set_temp(params, wait=True)
-    def cmd_M140(self, params):
-        # Set Bed Temperature
-        self._set_temp(params, is_bed=True)
-    def cmd_M190(self, params):
-        # Set Bed Temperature and Wait
-        self._set_temp(params, is_bed=True, wait=True)
-    def cmd_M106(self, params):
-        # Set fan speed
-        self._set_fan_speed(self.get_float('S', params, 255., minval=0.) / 255.)
-    def cmd_M107(self, params):
-        # Turn fan off
-        self._set_fan_speed(0.)
+
     # G-Code miscellaneous commands
     cmd_M112_when_not_ready = True
     def cmd_M112(self, params):
