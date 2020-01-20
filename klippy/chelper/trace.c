@@ -19,6 +19,17 @@ void __visible set_trace_level(uint8_t  t){
     trace_level = t;
 }
 
+void trace_spi_tx_byte(const char b){
+    //if (trace_level >= TRC_DEBUG){
+       printf("SPI TX %.2X\n", b); 
+    //}
+}
+
+void trace_spi_rx_byte(const char b){
+    //if (trace_level >= TRC_DEBUG){
+       printf("SPI RX %.2X\n", b); 
+    //}
+}
 
 void trace_msg(uint8_t level, const char* fmt, ...){
     if (level <= trace_level){

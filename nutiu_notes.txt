@@ -3,8 +3,11 @@ Add to /boot/cmdline.txt:
 spidev.bufsiz=32768
 
 -- gcome commands added:
+enable comm trace: TRACE_COMM L=<level>
 set_zero_pos
 get_position
+send error compensation value: COMP
+ex: COMP X=20
 ..
 
 -- start param added: -t <level> -> trace mcu command

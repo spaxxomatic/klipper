@@ -95,8 +95,18 @@ stepper_event(struct timer *t)
     struct stepper *s = container_of(t, struct stepper, time);
     // AVR optimized step function
     gpio_out_toggle_noirq(s->step_pin);
-
+    
     uint_fast16_t count = s->count - 1;
+    if (count > 1 && (s->add == 0) && (s->pos_error_count != 0)){ //nutiu do positon error correction only during the constant speed phases
+        /*uint_fast16_t count = s->pos_error_count - 1;
+        s->time.waketime += s->interval;        
+        s->pos_error_count = count;
+        gpio_out_toggle_noirq(s->step_pin);
+        return SF_RESCHEDULE;
+        */
+       count += s->pos_error_count;
+       s->pos_error_count = 0;
+    };
     if (likely(count)) {
         s->count = count;
         s->time.waketime += s->interval;
@@ -140,7 +150,7 @@ command_queue_step(uint32_t *args)
     struct stepper *s = stepper_oid_lookup(args[0]);
     struct stepper_move *m = move_alloc();
     m->interval = args[1];
-    m->count = args[2];
+    m->count = args[2]; 
     if (!m->count)
         shutdown("Invalid count parameter");
     m->add = args[3];
@@ -264,16 +274,7 @@ DECL_SHUTDOWN(stepper_shutdown);
 void
 command_position_adjust(uint8_t oid, int8_t steps)
 {
-    return;
-    //stepper_stop(stepper_oid_lookup(0));
-    //stepper_stop(stepper_oid_lookup(1));
-    //struct stepper *s = stepper_oid_lookup(args[0]);
     struct stepper *s = stepper_oid_lookup(oid);
-    s->pos_error_count = steps;
-    s->count += steps; 
-    s->position += steps;
-    //if (s->pos_error_count) { //nutiu position error compensation
-    //    s->count += s->pos_error_count; //might be crude, but maybe we can smooth it on MCU side
-    //    s->pos_error_count = 0;
-    //}
+    //struct stepper *s = stepper_oid_lookup(1); 
+    s->pos_error_count += steps;
 }

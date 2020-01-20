@@ -22,7 +22,7 @@
 #endif 
 
 #include "serialqueue.h" //MESSAGE_SYNC , serialqueue_alloc, etc
-#include "spi_mcu_comm.h"
+#include "spi_mcu_comm.h" //spi_sendbyte
 #include "trace.h"
 
 int spi_fd = 0;
@@ -142,9 +142,11 @@ int spi_sendbyte(char tbyte)
 {
 	int ret = 0;
     
-    trace_buffer("WB", (char*) &tbyte, 1);
+    trace_spi_tx_byte(tbyte);
+    char rx_char ;
 	struct spi_ioc_transfer tr = {
 		.tx_buf = (unsigned long)&tbyte,
+        .rx_buf = (unsigned long)&rx_char,
 		.len = 1,
 		.speed_hz = spi_speed,
 		.bits_per_word = SPI_BITS,
@@ -155,7 +157,10 @@ int spi_sendbyte(char tbyte)
         trace_msg(0,"can't send spi data\n");
         ret = -1;
     }
-    
+    trace_spi_rx_byte(rx_char);
+    if ( rx_char != MESSAGE_SYNC) {
+        return -1;
+    }
     return ret;
 }
 
@@ -180,6 +185,7 @@ int spi_write(char* inp_buff, int buff_len)
         trace_msg(0,"can't send spi data\n");
         ret = -1;
     }
+    
     free(rx_buff);
     
     return ret;

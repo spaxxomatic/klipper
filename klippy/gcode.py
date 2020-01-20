@@ -703,29 +703,32 @@ class GCodeParser:
         mcu_real_pos = " ".join(["%s:%.4f" % (s.get_name(), s.get_mcu_real_position())
                             for s in steppers])                            
         stepper_pos = " ".join(
-            ["%s:%.6f" % (s.get_name(), s.get_commanded_position())
+            ["%s:%.4f" % (s.get_name(), s.get_commanded_position())
              for s in steppers])
-        kinematic_pos = " ".join(["%s:%.6f"  % (a, v)
+        kinematic_pos = " ".join(["%s:%.4f"  % (a, v)
                                   for a, v in zip("XYZE", kin.calc_position())])
-        toolhead_pos = " ".join(["%s:%.6f" % (a, v) for a, v in zip(
-            "XYZE", self.toolhead.get_position())])
+        scales_pos = " X:%.6f Y:%.6f" % (self.ffi_lib.get_x_pos(), self.ffi_lib.get_y_pos()) 
+        #toolhead_pos = " ".join(["%s:%.6f" % (a, v) for a, v in zip(
+        #    "XYZE", self.toolhead.get_position())])
         #gcode_pos = " ".join(["%s:%.6f"  % (a, v)
         #                      for a, v in zip("XYZE", self.last_position)])
         #base_pos = " ".join(["%s:%.6f"  % (a, v)
         #                     for a, v in zip("XYZE", self.base_position)])
         #homing_pos = " ".join(["%s:%.6f"  % (a, v)
         #                       for a, v in zip("XYZ", self.homing_position)])
-        self.respond_info(
+        self.respond_info("\n"
             "mcu_calculated: %s\n"
             "mcu_real: %s\n"
             "stepper: %s\n"
             "kinematic: %s\n"
-            "toolhead: %s\n"
+            "scales: %s\n"
+            #"toolhead: %s\n"
             #"gcode: %s\n"
             #"gcode base: %s\n"
             #"gcode homing: %s" 
             % (
-                mcu_pos, mcu_real_pos, stepper_pos, kinematic_pos, toolhead_pos,
+                mcu_pos, mcu_real_pos, stepper_pos, kinematic_pos, scales_pos
+            #    toolhead_pos,
             #    gcode_pos, base_pos, homing_pos
                 ))
     def request_restart(self, result):

@@ -37,7 +37,10 @@ void setSensorResolution(float resolution){
 
 axis_position_struct  __visible
 get_axis_stat(){
-    axis_position_struct ret = {.xerror = X_axis.last_error, .yerror = Y_axis.last_error, .xposition = X_axis.position_mm, .yposition = Y_axis.position_mm};
+    axis_position_struct ret = {.xerror = X_axis.last_error, .yerror = Y_axis.last_error, 
+        .xposition = get_x_pos(), 
+        .yposition = get_y_pos()
+        };
     return ret;
 }
 
@@ -53,12 +56,14 @@ zero_axis(char axis){
 
 float  __visible
 get_x_pos(){
-    return X_axis.position_mm;
+    return (float)as5311resolution*(X_axis.abs_position);
+    //return X_axis.position_mm;
 }
 
 float __visible
 get_y_pos(){
-    return Y_axis.position_mm;
+    return (float)as5311resolution*(Y_axis.abs_position);
+    //return Y_axis.position_mm;
 }
 
 long  __visible
@@ -98,7 +103,7 @@ static void read_axis(axis_struct* ptr_axis, uint16_t rcvd_encoder_val){
             ptr_axis->abs_position += delta;
         }
         ptr_axis->prev_enc_value = ptr_axis->enc_value;
-        ptr_axis->position_mm = (float)as5311resolution*(ptr_axis->abs_position);
+        //ptr_axis->position_mm = (float)as5311resolution*(ptr_axis->abs_position);
         //printf("%c %i %i %i \n",ptr_axis->name, ptr_axis->enc_value,  ptr_axis->prev_enc_value, ptr_axis->position);
     }
 }

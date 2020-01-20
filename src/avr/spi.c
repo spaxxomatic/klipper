@@ -5,6 +5,8 @@
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
 #include "autoconf.h" // CONFIG_MACH_atmega644p
+#include <avr/interrupt.h> // USART_RX_vect
+
 #include "command.h" // shutdown
 #include "gpio.h" // spi_setup
 #include "internal.h" // GPIO
@@ -54,6 +56,10 @@ ISR (SPI_STC_vect)
     //the rest of 6 bits are the delta information
     uint8_t oid = SPDR>>6;
     int8_t pos_delta = SPDR&0x3f;
+    if ((SPDR&(1<<5)) != 0){ //if the sign bit is set;
+      pos_delta = -pos_delta;
+    } 
     command_position_adjust(oid, pos_delta);
-    SPDR = MESSAGE_SYNC;
+    //SPDR = MESSAGE_SYNC;
+    SPDR = oid;
 }

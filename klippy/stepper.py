@@ -62,6 +62,7 @@ class PrinterStepper:
         self.name = config.get_name()
         self.need_motor_enable = True
         # Stepper definition
+        print "PrinterStepper %s"%self.name
         ppins = printer.lookup_object('pins')
         step_pin = config.get('step_pin')
         self.mcu_stepper = mcu_stepper = ppins.setup_pin('stepper', step_pin)

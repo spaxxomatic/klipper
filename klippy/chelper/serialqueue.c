@@ -1201,19 +1201,20 @@ void __visible compensate_poserror(char axis, int steps){
     #define POSITION_ADJUST_MSG_LEN 3
     
     uint8_t oid = get_oid_of_axis_stepper(axis);
-    uint16_t pos_delta = 400;
-    uint8_t delta_positive = 1;
-    uint8_t msg;
+    int pos_delta = 32;
+    uint8_t delta_sign = 0;
+    if (steps < 0)  delta_sign = 1;
+    uint8_t msg = 0;
+    //printf("axis %c oid %i steps %i \n", axis, oid, steps);
+
     while(pos_delta > 31){
             uint8_t send_delta = 31;
-            msg = oid<<6 || delta_positive<<5 || send_delta;
-            spi_sendbyte(&send_delta, 1);
+            msg = oid<<6 | delta_sign<<5 | send_delta;
+            spi_sendbyte(msg);
             pos_delta -= send_delta;
     }
     if (pos_delta > 0){
-        uint8_t send_delta = pos_delta;
-        msg = oid<<6 || delta_positive<<5 || pos_delta;
-        spi_sendbyte(&send_delta, 1);
+        spi_sendbyte(oid<<6 | delta_sign<<5 | pos_delta);
     }
 
 }
